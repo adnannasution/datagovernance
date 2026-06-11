@@ -102,24 +102,58 @@
 
 <div class="card mt-lg">
   <div class="card-title">Graph Visualisasi Equipment</div>
-  <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+  <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap">
     <input type="text" id="graph-tag-input" placeholder="Masukkan tag number, contoh: 4B-P-001"
       style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px"
       onkeydown="if(event.key==='Enter') loadGraph()" />
     <button class="btn btn-primary" onclick="loadGraph()">Tampilkan Graph</button>
     <button class="btn" onclick="clearGraph()" style="font-size:12px">Clear</button>
+    <button class="btn" onclick="exportPNG()" id="export-btn" style="font-size:12px" disabled>Export PNG</button>
+  </div>
+  <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.75rem;font-size:13px">
+    <span style="color:var(--text2);font-weight:500">Kedalaman:</span>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="graph-depth" value="1" checked> 1 hop
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="graph-depth" value="2"> 2 hop
+    </label>
   </div>
   <div id="graph-error" class="hidden" style="padding:0.75rem;background:var(--danger-bg);color:var(--danger);border-radius:var(--radius);font-size:13px;margin-bottom:0.75rem"></div>
-  <div id="graph-container" style="height:500px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2)"></div>
-  <div id="graph-legend" class="hidden" style="margin-top:0.75rem;display:flex;gap:1rem;flex-wrap:wrap;font-size:12px">
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#4A90D9;display:inline-block"></span>Equipment</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#E74C3C;display:inline-block"></span>BadActor / ICU</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#F39C12;display:inline-block"></span>SAP</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#27AE60;display:inline-block"></span>ATG / Metering / Power</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#9B59B6;display:inline-block"></span>Readiness / Workplan</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#1ABC9C;display:inline-block"></span>Document</span>
-    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#95A5A6;display:inline-block"></span>Lainnya</span>
+  <div style="display:flex;gap:0.75rem;align-items:flex-start">
+    <div id="graph-container" style="flex:1;height:520px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2)"></div>
+    <div id="node-panel" class="hidden" style="width:280px;min-height:200px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);padding:1rem;font-size:12px;overflow-y:auto;max-height:520px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong id="node-panel-title" style="font-size:13px">Node Properties</strong>
+        <button onclick="document.getElementById('node-panel').classList.add('hidden')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;line-height:1">×</button>
+      </div>
+      <div id="node-panel-content"></div>
+    </div>
   </div>
+  <div id="graph-legend" class="hidden" style="margin-top:0.75rem;display:flex;gap:0.75rem;flex-wrap:wrap;font-size:12px">
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#4A90D9;display:inline-block;clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)"></span>Equipment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#E74C3C;display:inline-block"></span>BadActor / ICU</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#F39C12;display:inline-block"></span>SAP Notif / Work Order</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#27AE60;display:inline-block"></span>ATG / Metering / Power / BOC</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#1ABC9C;display:inline-block"></span>Inspection / Pipeline / ZeroClamp</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#9B59B6;display:inline-block"></span>Readiness</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#3498DB;display:inline-block"></span>Workplan</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#E67E22;display:inline-block"></span>IRKAP / Critical</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#95A5A6;display:inline-block"></span>Document / Lainnya</span>
+  </div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Domain Relations Sync</span>
+    <button class="btn btn-secondary" id="domain-rel-btn" onclick="startDomainRelSync()" {% if not stats.connected %}disabled{% endif %} style="font-size:12px">
+      Sync Domain Relations
+    </button>
+  </div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:0.5rem">
+    Buat relasi antar tabel: SAPNotification→SAPWorkOrder (GENERATED_WO), BadActor→IRKAPProgram (HAS_IRKAP), IRKAPProgram→IRKAPActual (HAS_ACTUAL)
+  </div>
+  <div id="domain-rel-status" class="hidden" style="margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
 </div>
 
 <div class="card mt-lg">
@@ -236,22 +270,32 @@ function showTableSyncResult(result) {
 // ─── Graph Visualization ──────────────────────────────────────
 
 const GROUP_COLORS = {
-  Equipment:       '#4A90D9',
-  BadActor:        '#E74C3C',
-  ICUMonitoring:   '#E74C3C',
-  SAPNotification: '#F39C12',
-  SAPWorkOrder:    '#F39C12',
-  ATGMonitoring:   '#27AE60',
-  MeteringMonitor: '#27AE60',
-  PowerStream:     '#27AE60',
-  ReadinessJetty:  '#9B59B6',
-  ReadinessTank:   '#9B59B6',
-  ReadinessSPM:    '#9B59B6',
-  WorkplanJetty:   '#9B59B6',
-  WorkplanTank:    '#9B59B6',
-  WorkplanSPM:     '#9B59B6',
-  Document:        '#1ABC9C',
+  Equipment:          '#4A90D9',
+  BadActor:           '#E74C3C',
+  ICUMonitoring:      '#E74C3C',
+  SAPNotification:    '#F39C12',
+  SAPWorkOrder:       '#F39C12',
+  ATGMonitoring:      '#27AE60',
+  MeteringMonitor:    '#27AE60',
+  PowerStream:        '#27AE60',
+  BOC:                '#27AE60',
+  InspectionPlan:     '#1ABC9C',
+  PipelineInspection: '#1ABC9C',
+  ZeroClamp:          '#1ABC9C',
+  ReadinessJetty:     '#9B59B6',
+  ReadinessTank:      '#9B59B6',
+  ReadinessSPM:       '#9B59B6',
+  WorkplanJetty:      '#3498DB',
+  WorkplanTank:       '#3498DB',
+  WorkplanSPM:        '#3498DB',
+  IRKAPProgram:       '#E67E22',
+  IRKAPActual:        '#E67E22',
+  CriticalEquipment:  '#E67E22',
+  Document:           '#95A5A6',
 };
+
+// Store full node data for click panel
+let _nodeDataMap = {};
 
 function getColor(group) {
   return GROUP_COLORS[group] || '#95A5A6';
@@ -261,12 +305,17 @@ async function loadGraph() {
   const tag = document.getElementById('graph-tag-input').value.trim();
   if (!tag) return;
 
+  const depth = document.querySelector('input[name="graph-depth"]:checked').value;
+
   document.getElementById('graph-error').classList.add('hidden');
   document.getElementById('graph-container').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">Memuat graph...</div>';
   document.getElementById('graph-legend').classList.add('hidden');
+  document.getElementById('node-panel').classList.add('hidden');
+  document.getElementById('export-btn').disabled = true;
+  _nodeDataMap = {};
 
   try {
-    const res = await fetch('/api/neo4j/graph?tag=' + encodeURIComponent(tag));
+    const res = await fetch('/api/neo4j/graph?tag=' + encodeURIComponent(tag) + '&depth=' + depth);
     const data = await res.json();
 
     if (data.error) {
@@ -283,19 +332,23 @@ async function loadGraph() {
       return;
     }
 
-    const visNodes = data.nodes.map(n => ({
-      id: n.id,
-      label: n.label,
-      title: n.title,
-      color: {
-        background: getColor(n.group),
-        border: getColor(n.group),
-        highlight: { background: getColor(n.group), border: '#fff' },
-      },
-      font: { color: '#fff', size: n.group === 'Equipment' ? 14 : 11 },
-      size: n.group === 'Equipment' ? 30 : 20,
-      shape: n.group === 'Equipment' ? 'star' : 'dot',
-    }));
+    const visNodes = data.nodes.map(n => {
+      _nodeDataMap[n.id] = n;
+      return {
+        id: n.id,
+        label: n.label,
+        title: n.title,
+        color: {
+          background: getColor(n.group),
+          border: getColor(n.group),
+          highlight: { background: getColor(n.group), border: '#fff' },
+        },
+        font: { color: '#fff', size: n.group === 'Equipment' ? 14 : 11 },
+        size: n.group === 'Equipment' ? 30 : 20,
+        shape: n.group === 'Equipment' ? 'star' : 'dot',
+        _group: n.group,
+      };
+    });
 
     const visEdges = data.edges.map((e, i) => ({
       id: i,
@@ -341,6 +394,18 @@ async function loadGraph() {
 
     graphNetwork = new vis.Network(container, networkData, options);
     document.getElementById('graph-legend').classList.remove('hidden');
+    document.getElementById('export-btn').disabled = false;
+
+    // Node click — show properties panel
+    graphNetwork.on('click', function(params) {
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        const nodeData = _nodeDataMap[nodeId];
+        if (nodeData) {
+          showNodePanel(nodeData);
+        }
+      }
+    });
 
   } catch(err) {
     document.getElementById('graph-error').textContent = 'Error: ' + err.message;
@@ -349,15 +414,102 @@ async function loadGraph() {
   }
 }
 
+function showNodePanel(node) {
+  document.getElementById('node-panel-title').textContent = node.group + ': ' + node.label;
+  const props = (node.title || '').split('\n').filter(Boolean);
+  let html = '';
+  if (props.length > 0) {
+    html = props.map(p => {
+      const idx = p.indexOf(': ');
+      if (idx > -1) {
+        const key = p.substring(0, idx);
+        const val = p.substring(idx + 2);
+        return `<div style="margin-bottom:4px"><span style="color:var(--text3)">${key}:</span> <span style="color:var(--text1);word-break:break-all">${val}</span></div>`;
+      }
+      return `<div style="margin-bottom:4px;color:var(--text2)">${p}</div>`;
+    }).join('');
+  } else {
+    html = '<div style="color:var(--text3)">Tidak ada properti</div>';
+  }
+  document.getElementById('node-panel-content').innerHTML = html;
+  document.getElementById('node-panel').classList.remove('hidden');
+}
+
+function exportPNG() {
+  if (!graphNetwork) return;
+  try {
+    const canvas = document.querySelector('#graph-container canvas');
+    if (!canvas) { alert('Canvas tidak ditemukan'); return; }
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'knowledge-graph.png';
+    a.click();
+  } catch(e) {
+    alert('Export gagal: ' + e.message);
+  }
+}
+
 function clearGraph() {
   if (graphNetwork) {
     graphNetwork.destroy();
     graphNetwork = null;
   }
+  _nodeDataMap = {};
   document.getElementById('graph-container').innerHTML = '';
   document.getElementById('graph-error').classList.add('hidden');
   document.getElementById('graph-legend').classList.add('hidden');
+  document.getElementById('node-panel').classList.add('hidden');
+  document.getElementById('export-btn').disabled = true;
   document.getElementById('graph-tag-input').value = '';
+}
+
+// ─── Domain Relations Sync ────────────────────────────────────
+
+let domainRelInterval = null;
+
+async function startDomainRelSync() {
+  const btn = document.getElementById('domain-rel-btn');
+  const statusEl = document.getElementById('domain-rel-status');
+  btn.disabled = true;
+  btn.textContent = 'Sync berjalan...';
+  statusEl.classList.remove('hidden');
+  statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = 'Memulai sync domain relations...';
+
+  try {
+    const res = await fetch('/api/neo4j/sync/domain-relations', { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Gagal memulai sync');
+    }
+
+    domainRelInterval = setInterval(async () => {
+      try {
+        const sr = await fetch('/api/neo4j/sync/domain-relations/status');
+        const sd = await sr.json();
+        if (!sd.running && sd.last_result !== null) {
+          clearInterval(domainRelInterval);
+          const r = sd.last_result;
+          if (r.error) {
+            statusEl.style.color = 'var(--danger)';
+            statusEl.textContent = 'Error: ' + r.error;
+          } else {
+            statusEl.style.color = 'var(--success)';
+            statusEl.innerHTML = `✓ Selesai — GENERATED_WO: <strong>${r.GENERATED_WO}</strong>, HAS_IRKAP: <strong>${r.HAS_IRKAP}</strong>, HAS_ACTUAL: <strong>${r.HAS_ACTUAL}</strong>`;
+          }
+          btn.disabled = false;
+          btn.textContent = 'Sync Domain Relations';
+        }
+      } catch(e) {}
+    }, 2000);
+
+  } catch(err) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = 'Error: ' + err.message;
+    btn.disabled = false;
+    btn.textContent = 'Sync Domain Relations';
+  }
 }
 
 async function startSync() {

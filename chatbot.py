@@ -64,12 +64,55 @@ DOKUMEN:
 - doc_tag_links(doc_id, tag_number, link_type)
 """
 
+# ─── Graph Context Helper ─────────────────────────────────────────────────────
+
+def get_equipment_context_from_graph(tag: str) -> dict:
+    """Get all connected data for a tag from Neo4j."""
+    from neo4j_sync import get_driver
+    with get_driver() as driver:
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (e:Equipment {tag_number: $tag})
+                OPTIONAL MATCH (e)<-[:HAS_BAD_ACTOR]-(ba:BadActor)
+                OPTIONAL MATCH (e)<-[:HAS_ICU]-(icu:ICUMonitoring)
+                OPTIONAL MATCH (e)<-[:HAS_NOTIFICATION]-(n:SAPNotification)
+                OPTIONAL MATCH (e)<-[:HAS_WORK_ORDER]-(wo:SAPWorkOrder)
+                OPTIONAL MATCH (e)<-[:HAS_BOC]-(boc:BOC)
+                OPTIONAL MATCH (e)<-[:HAS_IRKAP]-(irkap:IRKAPProgram)
+                OPTIONAL MATCH (doc:Document)-[:TERKAIT_DENGAN]->(e)
+                RETURN e,
+                    collect(DISTINCT ba)[..5] as bad_actors,
+                    collect(DISTINCT icu)[..5] as icus,
+                    collect(DISTINCT n)[..5] as notifications,
+                    collect(DISTINCT wo)[..5] as work_orders,
+                    collect(DISTINCT boc)[..3] as bocs,
+                    collect(DISTINCT irkap)[..3] as irkaps,
+                    collect(DISTINCT doc)[..5] as documents
+            """, {"tag": tag})
+            row = result.single()
+            if not row:
+                return None
+            return dict(row)
+
+
+def extract_tag_from_message(message: str) -> str | None:
+    """Extract equipment tag pattern like XX-XXXX or similar from message."""
+    pattern = r'\b[A-Z0-9]{2,}-[A-Z0-9][-A-Z0-9]*\b'
+    matches = re.findall(pattern, message.upper())
+    return matches[0] if matches else None
+
+
 # ─── Intent Router ────────────────────────────────────────────────────────────
 
 def detect_intent(message: str, history: list) -> str:
     """
     Deteksi intent: 'rag', 'sql', 'graph', 'hybrid', 'general'
     """
+    # If an equipment tag is detected, bias towards graph or hybrid
+    tag_hint = ""
+    if extract_tag_from_message(message):
+        tag_hint = "\nCATATAN: Pesan mengandung tag equipment. Pertimbangkan 'graph' atau 'hybrid' jika pertanyaan tentang data/relasi equipment tersebut.\n"
+
     history_text = "\n".join([
         f"{m['role']}: {m['content'][:100]}" for m in history[-4:]
     ]) if history else ""
@@ -82,10 +125,10 @@ def detect_intent(message: str, history: list) -> str:
             "content": f"""Klasifikasikan pertanyaan berikut ke salah satu intent:
 - 'rag': tanya isi dokumen, SOP, prosedur, laporan, manual
 - 'sql': tanya data angka, jumlah, status, list equipment, rekap dari database
-- 'graph': tanya relasi antar entitas, koneksi equipment-dokumen, network
-- 'hybrid': butuh kombinasi dokumen DAN data database
+- 'graph': tanya relasi antar entitas, koneksi equipment-dokumen, network, data lengkap satu equipment
+- 'hybrid': butuh kombinasi dokumen DAN data database/graph
 - 'general': sapaan, pertanyaan umum, tidak spesifik
-
+{tag_hint}
 Konteks percakapan sebelumnya:
 {history_text}
 
@@ -269,26 +312,90 @@ Sertakan insight singkat jika relevan."""
 
 # ─── Graph Handler ────────────────────────────────────────────────────────────
 
-def handle_graph(message: str) -> dict:
-    """Generate Cypher query, execute di Neo4j, format jawaban."""
-    try:
-        from neo4j_sync import get_driver
+CYPHER_SYSTEM_PROMPT = """Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
 
-        # Generate Cypher
-        cypher_resp = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=300,
-            messages=[
-                {
-                    "role": "system",
-                    "content": """Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
-Node yang tersedia: Equipment, Document, BOC, ICUMonitoring, ATGMonitoring, MeteringMonitor, BadActor
-Relasi: TERKAIT_DENGAN (Document->Equipment), PUNYA_PERFORMA (Equipment->BOC), PUNYA_ICU, PUNYA_ATG, PUNYA_METERING, PUNYA_BAD_ACTOR
+Node labels yang tersedia: Equipment, Document, BOC, ICUMonitoring, ATGMonitoring, MeteringMonitor,
+BadActor, SAPNotification, SAPWorkOrder, InspectionPlan, PipelineInspection, ZeroClamp, PowerStream,
+CriticalEquipment, ReadinessJetty, ReadinessTank, ReadinessSPM, WorkplanJetty, WorkplanTank,
+WorkplanSPM, IRKAPProgram, IRKAPActual
+
+Relasi yang tersedia (arah dari Equipment kecuali disebutkan lain):
+- HAS_NOTIFICATION (Equipment->SAPNotification)
+- HAS_WORK_ORDER (Equipment->SAPWorkOrder)
+- HAS_BOC (Equipment->BOC)
+- HAS_ICU (Equipment->ICUMonitoring)
+- HAS_BAD_ACTOR (Equipment->BadActor)
+- HAS_ATG (Equipment->ATGMonitoring)
+- HAS_METERING (Equipment->MeteringMonitor)
+- HAS_IRKAP (Equipment->IRKAPProgram, juga BadActor->IRKAPProgram)
+- HAS_PIPELINE_INSPECTION (Equipment->PipelineInspection)
+- HAS_ZERO_CLAMP (Equipment->ZeroClamp)
+- HAS_POWER_STREAM (Equipment->PowerStream)
+- IS_CRITICAL (Equipment->CriticalEquipment)
+- HAS_INSPECTION_PLAN (Equipment->InspectionPlan)
+- HAS_READINESS (Equipment->ReadinessJetty/ReadinessTank/ReadinessSPM)
+- HAS_WORKPLAN (Equipment->WorkplanJetty/WorkplanTank/WorkplanSPM)
+- HAS_IRKAP_ACTUAL (Equipment->IRKAPActual)
+- TERKAIT_DENGAN (Document->Equipment)
+- GENERATED_WO (SAPNotification->SAPWorkOrder)
+- HAS_ACTUAL (IRKAPProgram->IRKAPActual)
+
 Equipment punya property: tag_number, description, maintenance_plant
 Document punya property: doc_id, judul, tipe, ru
 
 Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20."""
-                },
+
+
+def handle_graph(message: str) -> dict:
+    """Generate Cypher query, execute di Neo4j, format jawaban.
+    If an equipment tag is detected, use GraphRAG for rich context first."""
+    try:
+        from neo4j_sync import get_driver
+
+        # Try GraphRAG first if tag detected
+        tag = extract_tag_from_message(message)
+        if tag:
+            try:
+                graph_ctx = get_equipment_context_from_graph(tag)
+                if graph_ctx:
+                    ctx_text = json.dumps(
+                        {k: [dict(n) for n in v] if isinstance(v, list) else dict(v) if hasattr(v, 'items') else v
+                         for k, v in graph_ctx.items()},
+                        default=str, ensure_ascii=False
+                    )
+                    fmt_resp = client.chat.completions.create(
+                        model=MODEL,
+                        max_tokens=800,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": """Kamu adalah asisten data governance Pertamina.
+Berikan jawaban komprehensif dalam Bahasa Indonesia berdasarkan data Knowledge Graph equipment berikut.
+Sertakan informasi penting seperti status bad actor, notifikasi SAP, work order, program IRKAP, dll jika tersedia.
+Jawab secara terstruktur dan informatif."""
+                            },
+                            {
+                                "role": "user",
+                                "content": f"Pertanyaan: {message}\n\nData Knowledge Graph untuk equipment {tag}:\n{ctx_text}"
+                            }
+                        ]
+                    )
+                    return {
+                        "type": "graph",
+                        "answer": fmt_resp.choices[0].message.content,
+                        "cypher": f"GraphRAG lookup for tag: {tag}",
+                        "data": [],
+                        "tag": tag
+                    }
+            except Exception:
+                pass  # Fall back to Cypher generation
+
+        # Generate Cypher (fallback or no tag)
+        cypher_resp = client.chat.completions.create(
+            model=MODEL,
+            max_tokens=300,
+            messages=[
+                {"role": "system", "content": CYPHER_SYSTEM_PROMPT},
                 {"role": "user", "content": message}
             ]
         )
@@ -344,7 +451,7 @@ Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20
 # ─── Hybrid Handler ───────────────────────────────────────────────────────────
 
 def handle_hybrid(message: str, history: list = None) -> dict:
-    """Kombinasi RAG + SQL, gabungkan hasilnya."""
+    """Kombinasi RAG + SQL + Graph (jika tag terdeteksi), gabungkan hasilnya."""
     rag_result = handle_rag(message)
     sql_result = handle_sql(message, history)
 
@@ -358,6 +465,22 @@ def handle_hybrid(message: str, history: list = None) -> dict:
     if not combined_context:
         combined_context = rag_result["answer"] or sql_result["answer"]
 
+    # Also include graph context if tag detected
+    graph_context_text = ""
+    tag = extract_tag_from_message(message)
+    if tag:
+        try:
+            graph_ctx = get_equipment_context_from_graph(tag)
+            if graph_ctx:
+                graph_context_text = json.dumps(
+                    {k: [dict(n) for n in v] if isinstance(v, list) else dict(v) if hasattr(v, 'items') else v
+                     for k, v in graph_ctx.items()},
+                    default=str, ensure_ascii=False
+                )
+                combined_context += f"\n\n**Dari Knowledge Graph (equipment {tag}):**\n{graph_context_text[:2000]}"
+        except Exception:
+            pass
+
     # Final synthesis
     synth = client.chat.completions.create(
         model=MODEL,
@@ -366,7 +489,7 @@ def handle_hybrid(message: str, history: list = None) -> dict:
             {
                 "role": "system",
                 "content": """Kamu adalah asisten data governance Pertamina senior.
-Gabungkan informasi dari dokumen dan database untuk menjawab pertanyaan secara komprehensif.
+Gabungkan informasi dari dokumen, database, dan Knowledge Graph untuk menjawab pertanyaan secara komprehensif.
 Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
             },
             {
@@ -382,7 +505,8 @@ Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
         "sources": rag_result.get("sources", []),
         "sql": sql_result.get("sql", ""),
         "sql_data": sql_result.get("data", []),
-        "total_rows": sql_result.get("total_rows", 0)
+        "total_rows": sql_result.get("total_rows", 0),
+        "graph_tag": tag if graph_context_text else None
     }
 
 # ─── General Handler ──────────────────────────────────────────────────────────
