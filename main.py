@@ -350,6 +350,8 @@ async def page_table_detail(request: Request, table_name: str,
         "total": total,
         "page": page,
         "total_pages": (total + limit - 1) // limit,
+        "offset": offset,
+        "limit": limit,
         "search": search,
         "quality": quality,
         "title": tbl_meta["label"]
@@ -497,6 +499,11 @@ async def api_sync_domain_relations(background_tasks: BackgroundTasks):
 @app.get("/api/neo4j/sync/domain-relations/status")
 async def api_domain_relations_status():
     return {"running": _domain_rel_running, "last_result": _last_domain_rel_result}
+
+@app.get("/api/neo4j/coverage")
+async def api_neo4j_coverage():
+    from neo4j_sync import get_coverage_stats
+    return get_coverage_stats()
 
 # ─── CHATBOT ROUTES ──────────────────────────────────────────────────────────
 
