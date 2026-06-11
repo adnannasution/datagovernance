@@ -377,27 +377,36 @@ BadActor, SAPNotification, SAPWorkOrder, InspectionPlan, PipelineInspection, Zer
 CriticalEquipment, ReadinessJetty, ReadinessTank, ReadinessSPM, WorkplanJetty, WorkplanTank,
 WorkplanSPM, IRKAPProgram, IRKAPActual
 
-Relasi yang tersedia (semua berasal dari Equipment kecuali disebutkan lain):
-- (Equipment)<-[:HAS_NOTIFICATION]-(SAPNotification)
-- (Equipment)<-[:HAS_WORK_ORDER]-(SAPWorkOrder)
-- (Equipment)<-[:HAS_BOC]-(BOC)
-- (Equipment)<-[:HAS_ICU]-(ICUMonitoring)
-- (Equipment)<-[:HAS_BAD_ACTOR]-(BadActor)
-- (Equipment)<-[:HAS_ATG]-(ATGMonitoring)
-- (Equipment)<-[:HAS_METERING]-(MeteringMonitor)
-- (Equipment)<-[:HAS_IRKAP]-(IRKAPProgram)
-- (Equipment)<-[:HAS_IRKAP_ACTUAL]-(IRKAPActual)
-- (Equipment)<-[:HAS_PIPELINE_INSPECTION]-(PipelineInspection)
-- (Equipment)<-[:HAS_ZERO_CLAMP]-(ZeroClamp)
-- (Equipment)<-[:HAS_POWER_STREAM]-(PowerStream)
-- (Equipment)<-[:IS_CRITICAL]-(CriticalEquipment)
-- (Equipment)<-[:HAS_INSPECTION_PLAN]-(InspectionPlan)
-- (Equipment)<-[:HAS_READINESS]-(ReadinessJetty / ReadinessTank / ReadinessSPM)
-- (Equipment)<-[:HAS_WORKPLAN]-(WorkplanJetty / WorkplanTank / WorkplanSPM)
+Relasi yang tersedia (Equipment sebagai HUB, semua relasi keluar dari Equipment):
+- (Equipment)-[:HAS_NOTIFICATION]->(SAPNotification)
+- (Equipment)-[:HAS_WORK_ORDER]->(SAPWorkOrder)
+- (Equipment)-[:HAS_BOC]->(BOC)
+- (Equipment)-[:HAS_ICU]->(ICUMonitoring)
+- (Equipment)-[:HAS_BAD_ACTOR]->(BadActor)
+- (Equipment)-[:HAS_ATG]->(ATGMonitoring)
+- (Equipment)-[:HAS_METERING]->(MeteringMonitor)
+- (Equipment)-[:HAS_IRKAP]->(IRKAPProgram)
+- (Equipment)-[:HAS_IRKAP_ACTUAL]->(IRKAPActual)
+- (Equipment)-[:HAS_PIPELINE_INSPECTION]->(PipelineInspection)
+- (Equipment)-[:HAS_ZERO_CLAMP]->(ZeroClamp)
+- (Equipment)-[:HAS_POWER_STREAM]->(PowerStream)
+- (Equipment)-[:IS_CRITICAL]->(CriticalEquipment)
+- (Equipment)-[:HAS_INSPECTION_PLAN]->(InspectionPlan)
+- (Equipment)-[:HAS_READINESS]->(ReadinessJetty)
+- (Equipment)-[:HAS_READINESS]->(ReadinessTank)
+- (Equipment)-[:HAS_READINESS]->(ReadinessSPM)
+- (Equipment)-[:HAS_WORKPLAN]->(WorkplanJetty)
+- (Equipment)-[:HAS_WORKPLAN]->(WorkplanTank)
+- (Equipment)-[:HAS_WORKPLAN]->(WorkplanSPM)
 - (Document)-[:TERKAIT_DENGAN]->(Equipment)
 - (SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
 - (BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
 - (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
+
+PENTING: Untuk query lintas tabel, selalu mulai dari Equipment sebagai hub:
+MATCH (e:Equipment)-[:HAS_BAD_ACTOR]->(ba:BadActor)
+MATCH (e)-[:HAS_ICU]->(icu:ICUMonitoring)
+Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations di atas.
 
 Equipment punya property: tag_number, description, maintenance_plant, criticality
 Document punya property: doc_id, judul, tipe, ru
