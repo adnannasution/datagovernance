@@ -65,15 +65,32 @@
 
 <div class="card mt-lg">
   <div class="card-title">Sync Management</div>
-  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-    <div>
-      <div style="font-size:13px;margin-bottom:4px">Full Sync — sync semua dokumen dari PostgreSQL ke Neo4j</div>
-      <div style="font-size:12px;color:var(--text3)">Dokumen yang sudah ada akan di-update, yang belum akan dibuat baru</div>
+  <div style="display:flex;align-items:flex-start;gap:2rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;margin-bottom:4px">Full Sync — sync semua dokumen dari PostgreSQL ke Neo4j</div>
+        <div style="font-size:12px;color:var(--text3)">Dokumen yang sudah ada akan di-update, yang belum akan dibuat baru</div>
+      </div>
+      <button class="btn btn-primary" id="sync-btn" onclick="startSync()" {% if not stats.connected %}disabled{% endif %}>
+        Jalankan Full Sync
+      </button>
     </div>
-    <button class="btn btn-primary" id="sync-btn" onclick="startSync()" {% if not stats.connected %}disabled{% endif %}>
-      Jalankan Full Sync
-    </button>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;margin-bottom:4px">Table Sync — sync semua tabel equipment ke Neo4j</div>
+        <div style="font-size:12px;color:var(--text3)">Sync SAP, Monitoring, Inspection, Readiness, Workplan, IRKAP</div>
+      </div>
+      <button class="btn btn-secondary" id="table-sync-btn" onclick="startTableSync()" {% if not stats.connected %}disabled{% endif %}>
+        Sync Semua Tabel
+      </button>
+    </div>
   </div>
+
+  <div id="table-sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
+    <div id="table-sync-msg" style="font-size:13px;margin-bottom:8px">Sync tabel berjalan...</div>
+    <div class="progress-bar"><div class="progress-fill" id="table-sync-progress" style="width:0%"></div></div>
+  </div>
+  <div id="table-sync-result" class="hidden" style="margin-top:1rem"></div>
 
   <div id="sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
     <div id="sync-msg" style="font-size:13px;margin-bottom:8px">Sync berjalan...</div>
@@ -81,6 +98,28 @@
   </div>
 
   <div id="sync-result" class="hidden" style="margin-top:1rem"></div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title">Graph Visualisasi Equipment</div>
+  <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+    <input type="text" id="graph-tag-input" placeholder="Masukkan tag number, contoh: 4B-P-001"
+      style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px"
+      onkeydown="if(event.key==='Enter') loadGraph()" />
+    <button class="btn btn-primary" onclick="loadGraph()">Tampilkan Graph</button>
+    <button class="btn" onclick="clearGraph()" style="font-size:12px">Clear</button>
+  </div>
+  <div id="graph-error" class="hidden" style="padding:0.75rem;background:var(--danger-bg);color:var(--danger);border-radius:var(--radius);font-size:13px;margin-bottom:0.75rem"></div>
+  <div id="graph-container" style="height:500px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2)"></div>
+  <div id="graph-legend" class="hidden" style="margin-top:0.75rem;display:flex;gap:1rem;flex-wrap:wrap;font-size:12px">
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#4A90D9;display:inline-block"></span>Equipment</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#E74C3C;display:inline-block"></span>BadActor / ICU</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#F39C12;display:inline-block"></span>SAP</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#27AE60;display:inline-block"></span>ATG / Metering / Power</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#9B59B6;display:inline-block"></span>Readiness / Workplan</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#1ABC9C;display:inline-block"></span>Document</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:50%;background:#95A5A6;display:inline-block"></span>Lainnya</span>
+  </div>
 </div>
 
 <div class="card mt-lg">
@@ -104,9 +143,222 @@
 
 {% endblock %}
 
+{% block head_extra %}
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+{% endblock %}
+
 {% block scripts %}
 <script>
 let syncInterval = null;
+let tableSyncInterval = null;
+let graphNetwork = null;
+
+// ─── Table Sync ──────────────────────────────────────────────
+
+async function startTableSync() {
+  const btn = document.getElementById('table-sync-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sync berjalan...';
+
+  document.getElementById('table-sync-status').classList.remove('hidden');
+  document.getElementById('table-sync-result').classList.add('hidden');
+  document.getElementById('table-sync-progress').style.width = '10%';
+  document.getElementById('table-sync-msg').textContent = 'Memulai sync tabel...';
+
+  try {
+    const res = await fetch('/api/neo4j/sync/tables', { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Gagal memulai sync tabel');
+    }
+
+    let pct = 10;
+    tableSyncInterval = setInterval(async () => {
+      try {
+        const sr = await fetch('/api/neo4j/sync/tables/status');
+        const sd = await sr.json();
+        pct = Math.min(pct + 3, 90);
+        document.getElementById('table-sync-progress').style.width = pct + '%';
+
+        if (!sd.running && sd.last_result !== null) {
+          clearInterval(tableSyncInterval);
+          document.getElementById('table-sync-progress').style.width = '100%';
+          showTableSyncResult(sd.last_result);
+          btn.disabled = false;
+          btn.textContent = 'Sync Semua Tabel';
+        }
+      } catch(e) {}
+    }, 2000);
+
+  } catch(err) {
+    document.getElementById('table-sync-msg').textContent = 'Error: ' + err.message;
+    btn.disabled = false;
+    btn.textContent = 'Sync Semua Tabel';
+  }
+}
+
+function showTableSyncResult(result) {
+  const container = document.getElementById('table-sync-result');
+  container.classList.remove('hidden');
+  document.getElementById('table-sync-msg').textContent = 'Sync tabel selesai';
+
+  let rows = '';
+  let hasError = false;
+  for (const [tbl, res] of Object.entries(result)) {
+    if (res.error) {
+      hasError = true;
+      rows += `<tr><td style="padding:4px 8px;font-family:monospace;font-size:11px">${tbl}</td><td style="padding:4px 8px;color:var(--danger);font-size:11px">${res.error}</td><td>—</td><td>—</td></tr>`;
+    } else {
+      rows += `<tr><td style="padding:4px 8px;font-family:monospace;font-size:11px">${tbl}</td><td style="padding:4px 8px;color:var(--success);font-size:11px">OK</td><td style="padding:4px 8px;font-size:11px">${res.nodes_created ?? 0}</td><td style="padding:4px 8px;font-size:11px">${res.rels_created ?? 0}</td></tr>`;
+    }
+  }
+
+  container.innerHTML = `
+    <div style="padding:1rem;background:${hasError ? 'var(--warning-bg, #fff8e1)' : 'var(--success-bg)'};border-radius:var(--radius)">
+      <div style="font-weight:500;margin-bottom:8px;color:${hasError ? 'var(--warning, #f39c12)' : 'var(--success)'}">
+        ${hasError ? '⚠ Sync selesai dengan beberapa error' : '✓ Sync semua tabel selesai'}
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:4px 8px;text-align:left">Tabel</th>
+            <th style="padding:4px 8px;text-align:left">Status</th>
+            <th style="padding:4px 8px;text-align:left">Nodes</th>
+            <th style="padding:4px 8px;text-align:left">Relasi</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Graph Visualization ──────────────────────────────────────
+
+const GROUP_COLORS = {
+  Equipment:       '#4A90D9',
+  BadActor:        '#E74C3C',
+  ICUMonitoring:   '#E74C3C',
+  SAPNotification: '#F39C12',
+  SAPWorkOrder:    '#F39C12',
+  ATGMonitoring:   '#27AE60',
+  MeteringMonitor: '#27AE60',
+  PowerStream:     '#27AE60',
+  ReadinessJetty:  '#9B59B6',
+  ReadinessTank:   '#9B59B6',
+  ReadinessSPM:    '#9B59B6',
+  WorkplanJetty:   '#9B59B6',
+  WorkplanTank:    '#9B59B6',
+  WorkplanSPM:     '#9B59B6',
+  Document:        '#1ABC9C',
+};
+
+function getColor(group) {
+  return GROUP_COLORS[group] || '#95A5A6';
+}
+
+async function loadGraph() {
+  const tag = document.getElementById('graph-tag-input').value.trim();
+  if (!tag) return;
+
+  document.getElementById('graph-error').classList.add('hidden');
+  document.getElementById('graph-container').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">Memuat graph...</div>';
+  document.getElementById('graph-legend').classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/neo4j/graph?tag=' + encodeURIComponent(tag));
+    const data = await res.json();
+
+    if (data.error) {
+      document.getElementById('graph-error').textContent = data.error;
+      document.getElementById('graph-error').classList.remove('hidden');
+      document.getElementById('graph-container').innerHTML = '';
+      return;
+    }
+
+    if (data.nodes.length === 0) {
+      document.getElementById('graph-error').textContent = 'Tidak ada data untuk tag: ' + tag;
+      document.getElementById('graph-error').classList.remove('hidden');
+      document.getElementById('graph-container').innerHTML = '';
+      return;
+    }
+
+    const visNodes = data.nodes.map(n => ({
+      id: n.id,
+      label: n.label,
+      title: n.title,
+      color: {
+        background: getColor(n.group),
+        border: getColor(n.group),
+        highlight: { background: getColor(n.group), border: '#fff' },
+      },
+      font: { color: '#fff', size: n.group === 'Equipment' ? 14 : 11 },
+      size: n.group === 'Equipment' ? 30 : 20,
+      shape: n.group === 'Equipment' ? 'star' : 'dot',
+    }));
+
+    const visEdges = data.edges.map((e, i) => ({
+      id: i,
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      font: { size: 9, color: 'var(--text3)', align: 'middle' },
+      arrows: 'to',
+      color: { color: 'var(--border)', highlight: '#aaa' },
+      smooth: { type: 'curvedCW', roundness: 0.1 },
+    }));
+
+    const container = document.getElementById('graph-container');
+    container.innerHTML = '';
+
+    const networkData = {
+      nodes: new vis.DataSet(visNodes),
+      edges: new vis.DataSet(visEdges),
+    };
+
+    const options = {
+      physics: {
+        solver: 'barnesHut',
+        barnesHut: {
+          gravitationalConstant: -8000,
+          centralGravity: 0.3,
+          springLength: 120,
+          springConstant: 0.04,
+          damping: 0.09,
+        },
+        stabilization: { iterations: 150 },
+      },
+      interaction: {
+        hover: true,
+        tooltipDelay: 100,
+        zoomView: true,
+        dragView: true,
+      },
+      edges: {
+        width: 1.5,
+      },
+    };
+
+    graphNetwork = new vis.Network(container, networkData, options);
+    document.getElementById('graph-legend').classList.remove('hidden');
+
+  } catch(err) {
+    document.getElementById('graph-error').textContent = 'Error: ' + err.message;
+    document.getElementById('graph-error').classList.remove('hidden');
+    document.getElementById('graph-container').innerHTML = '';
+  }
+}
+
+function clearGraph() {
+  if (graphNetwork) {
+    graphNetwork.destroy();
+    graphNetwork = null;
+  }
+  document.getElementById('graph-container').innerHTML = '';
+  document.getElementById('graph-error').classList.add('hidden');
+  document.getElementById('graph-legend').classList.add('hidden');
+  document.getElementById('graph-tag-input').value = '';
+}
 
 async function startSync() {
   const btn = document.getElementById('sync-btn');
