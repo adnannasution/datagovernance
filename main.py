@@ -574,6 +574,16 @@ async def api_sync_domain_relations(background_tasks: BackgroundTasks):
 async def api_domain_relations_status():
     return {"running": _domain_rel_running, "last_result": _last_domain_rel_result}
 
+@app.post("/api/schema/refresh")
+async def api_schema_refresh():
+    """Force refresh schema cache (Neo4j + PostgreSQL)."""
+    try:
+        from schema_cache import refresh_all
+        refresh_all()
+        return {"message": "Schema cache refreshed"}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/api/neo4j/coverage")
 async def api_neo4j_coverage():
     from neo4j_sync import get_coverage_stats
