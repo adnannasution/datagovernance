@@ -100,8 +100,8 @@
         <td>{{ offset + loop.index }}</td>
         <td><code style="font-size:.82rem">{{ row.tag_canonical }}</code></td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            title="{{ row.equipment_description or '' }}">
-          {{ row.equipment_description or '—' }}
+            title="{{ row.description or '' }}">
+          {{ row.description or '—' }}
         </td>
         <td><code style="font-size:.82rem">{{ row.tag_variant }}</code></td>
         <td><span class="badge badge-tipe" style="font-size:.75rem">{{ row.source_table }}</span></td>
