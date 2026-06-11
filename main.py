@@ -599,8 +599,15 @@ async def api_chat(request: Request):
     if not message:
         raise HTTPException(400, "Message tidak boleh kosong")
 
-    result = chatbot_chat(message, history=history, filters=filters)
-    return result
+    try:
+        result = chatbot_chat(message, history=history, filters=filters)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=200, content={
+            "answer": "Maaf, terjadi kesalahan saat memproses pertanyaan. Silakan coba lagi.",
+            "intent": "error",
+            "error": str(e),
+        })
 
 # ─── TAG MAPPING ROUTES ──────────────────────────────────────────────────────
 
