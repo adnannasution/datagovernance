@@ -19,9 +19,33 @@ client = OpenAI(
 )
 MODEL = "gpt-4o"
 
-# ─── Schema context untuk SQL generation ─────────────────────────────────────
+# ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
-DB_SCHEMA = """
+def _get_db_schema() -> str:
+    try:
+        from schema_cache import get_pg_schema
+        schema = get_pg_schema()
+        if schema:
+            return schema
+    except Exception:
+        pass
+    return DB_SCHEMA_FALLBACK
+
+
+def _get_neo4j_schema() -> str:
+    try:
+        from schema_cache import get_neo4j_schema
+        schema = get_neo4j_schema()
+        if schema:
+            return schema
+    except Exception:
+        pass
+    return NEO4J_SCHEMA_FALLBACK
+
+
+# ─── Fallback static schema (used if dynamic build fails) ────────────────────
+
+DB_SCHEMA_FALLBACK = """
 Tabel-tabel yang tersedia (semua terhubung via tag number equipment):
 
 MASTER:
@@ -62,6 +86,31 @@ IRKAP:
 DOKUMEN:
 - doc_registry(id, judul, tipe_dokumen, ru, nomor_dokumen, deskripsi, file_name, file_type, status, total_pages, total_chunks, uploaded_at)
 - doc_tag_links(doc_id, tag_number, link_type)
+"""
+
+NEO4J_SCHEMA_FALLBACK = """
+Neo4j Knowledge Graph Schema (fallback):
+Relasi:
+  (Equipment)-[:HAS_BAD_ACTOR]->(BadActor)
+  (Equipment)-[:HAS_ICU]->(ICUMonitoring)
+  (Equipment)-[:HAS_NOTIFICATION]->(SAPNotification)
+  (Equipment)-[:HAS_WORK_ORDER]->(SAPWorkOrder)
+  (Equipment)-[:HAS_BOC]->(BOC)
+  (Equipment)-[:HAS_IRKAP_PROGRAM]->(IRKAPProgram)
+  (Equipment)-[:HAS_IRKAP_ACTUAL]->(IRKAPActual)
+  (Equipment)-[:HAS_ATG]->(ATGMonitoring)
+  (Equipment)-[:HAS_METERING]->(MeteringMonitor)
+  (Equipment)-[:HAS_PIPELINE_INSPECTION]->(PipelineInspection)
+  (Equipment)-[:HAS_INSPECTION_PLAN]->(InspectionPlan)
+  (Equipment)-[:HAS_ZERO_CLAMP]->(ZeroClamp)
+  (Equipment)-[:HAS_READINESS]->(ReadinessJetty/ReadinessTank/ReadinessSPM)
+  (Equipment)-[:HAS_WORKPLAN]->(WorkplanJetty/WorkplanTank/WorkplanSPM)
+  (Equipment)-[:IS_CRITICAL]->(CriticalEquipment)
+  (Equipment)-[:HAS_POWER_STREAM]->(PowerStream)
+  (Document)-[:TERKAIT_DENGAN]->(Equipment)
+  (SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
+  (BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
+  (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
 """
 
 # ─── Graph Context Helper ─────────────────────────────────────────────────────
@@ -325,7 +374,7 @@ def handle_sql(message: str, history: list = None) -> dict:
                 "content": f"""Kamu adalah SQL generator untuk database PostgreSQL Pertamina.
 Berdasarkan skema berikut, generate SQL query yang menjawab pertanyaan user.
 
-{DB_SCHEMA}
+{_get_db_schema()}
 
 ATURAN:
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
@@ -427,69 +476,20 @@ Sertakan insight singkat jika relevan."""
 
 # ─── Graph Handler ────────────────────────────────────────────────────────────
 
-CYPHER_SYSTEM_PROMPT = """Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
+def _get_cypher_prompt() -> str:
+    """Build dynamic Cypher system prompt from Neo4j schema cache."""
+    neo4j_schema = _get_neo4j_schema()
+    return f"""Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
 
-Node labels yang tersedia:
-Equipment, Document, BOC, ICUMonitoring, ATGMonitoring, MeteringMonitor,
-BadActor, SAPNotification, SAPWorkOrder, InspectionPlan, PipelineInspection, ZeroClamp, PowerStream,
-CriticalEquipment, ReadinessJetty, ReadinessTank, ReadinessSPM, WorkplanJetty, WorkplanTank,
-WorkplanSPM, IRKAPProgram, IRKAPActual
+{neo4j_schema}
 
-Relasi yang tersedia (Equipment sebagai HUB, semua relasi keluar dari Equipment):
-- (Equipment)-[:HAS_NOTIFICATION]->(SAPNotification)
-- (Equipment)-[:HAS_WORK_ORDER]->(SAPWorkOrder)
-- (Equipment)-[:HAS_BOC]->(BOC)
-- (Equipment)-[:HAS_ICU]->(ICUMonitoring)
-- (Equipment)-[:HAS_BAD_ACTOR]->(BadActor)
-- (Equipment)-[:HAS_ATG]->(ATGMonitoring)
-- (Equipment)-[:HAS_METERING]->(MeteringMonitor)
-- (Equipment)-[:HAS_IRKAP_PROGRAM]->(IRKAPProgram)
-- (Equipment)-[:HAS_IRKAP_ACTUAL]->(IRKAPActual)
-- (Equipment)-[:HAS_PIPELINE_INSPECTION]->(PipelineInspection)
-- (Equipment)-[:HAS_ZERO_CLAMP]->(ZeroClamp)
-- (Equipment)-[:HAS_POWER_STREAM]->(PowerStream)
-- (Equipment)-[:IS_CRITICAL]->(CriticalEquipment)
-- (Equipment)-[:HAS_INSPECTION_PLAN]->(InspectionPlan)
-- (Equipment)-[:HAS_READINESS]->(ReadinessJetty)
-- (Equipment)-[:HAS_READINESS]->(ReadinessTank)
-- (Equipment)-[:HAS_READINESS]->(ReadinessSPM)
-- (Equipment)-[:HAS_WORKPLAN]->(WorkplanJetty)
-- (Equipment)-[:HAS_WORKPLAN]->(WorkplanTank)
-- (Equipment)-[:HAS_WORKPLAN]->(WorkplanSPM)
-- (Document)-[:TERKAIT_DENGAN]->(Equipment)
-- (SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
-- (BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
-- (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
-
-PENTING: Untuk query lintas tabel, selalu mulai dari Equipment sebagai hub:
-MATCH (e:Equipment)-[:HAS_BAD_ACTOR]->(ba:BadActor)
-MATCH (e)-[:HAS_ICU]->(icu:ICUMonitoring)
-Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations di atas.
-
-Property penting per node (gunakan nama ini di WHERE/RETURN):
-- Equipment: tag_number, description, maintenance_plant, criticality
-- BadActor: tag_number, ru, status, problem, action_plan, progress, periode, no_irkap
-- ICUMonitoring: tag_no, ru, icu_status, issue, mitigation, progress, target_closed
-- IRKAPProgram: tag_number, ru, no_program_kerja, status, progress, target_date
-- IRKAPActual: tag_number, no_program, realisasi, status
-- SAPNotification: equipment, notification, notif_type, notif_date, description, order_no
-- SAPWorkOrder: order_no, equipment, order_type, description, system_status, total_plan_cost
-- BOC: equipment, ru, status, running_hours, mttr, mtbf
-- ATGMonitoring: tag_no_tangki, refinery_unit, status_atg, remark
-- MeteringMonitor: tag_number, refinery_unit, status_metering, remark
-- InspectionPlan: tag_number, ru, next_inspection_date, last_inspection_date
-- CriticalEquipment: tag_number, ru, criticality
-- Document: doc_id, judul, tipe, ru
-
-PENTING:
-- Jangan pakai property yang tidak ada di daftar atas (misal jangan pakai "condition", "kondisi", "state")
-- JANGAN filter WHERE berdasarkan nilai spesifik seperti "Buruk", "Active", "Critical" karena nilai di database tidak diketahui pasti
+ATURAN PENTING:
+- Selalu mulai MATCH dari Equipment sebagai hub pusat
+- Gunakan arah relasi yang benar sesuai schema di atas (Equipment)-[:REL]->(Node)
+- Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations
+- JANGAN filter WHERE dengan nilai spesifik ("Buruk", "Active") karena nilai tidak diketahui pasti
 - Gunakan IS NOT NULL untuk memastikan data ada, biarkan LLM analisis nilainya
-- Contoh BENAR: WHERE ba.status IS NOT NULL
-- Contoh SALAH: WHERE ba.status = "Active"
-- Untuk pertanyaan "kondisi buruk", kembalikan semua data dengan property status/kondisi lalu LLM akan filter dari hasilnya
-
-Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20."""
+- Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20"""
 
 
 def handle_graph(message: str) -> dict:
@@ -537,7 +537,7 @@ Jawab secara terstruktur dan informatif."""
             model=MODEL,
             max_tokens=300,
             messages=[
-                {"role": "system", "content": CYPHER_SYSTEM_PROMPT},
+                {"role": "system", "content": _get_cypher_prompt()},
                 {"role": "user", "content": message}
             ]
         )
