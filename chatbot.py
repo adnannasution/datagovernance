@@ -171,12 +171,13 @@ def detect_intent(message: str, history: list) -> str:
         f"{m['role']}: {m['content'][:100]}" for m in history[-4:]
     ]) if history else ""
 
-    resp = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=20,
-        messages=[{
-            "role": "user",
-            "content": f"""Klasifikasikan pertanyaan berikut ke salah satu intent:
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            max_tokens=20,
+            messages=[{
+                "role": "user",
+                "content": f"""Klasifikasikan pertanyaan berikut ke salah satu intent:
 - 'rag': tanya isi dokumen, SOP, prosedur, laporan, manual
 - 'sql': tanya data angka, jumlah, status, list equipment, rekap dari database
 - 'graph': tanya relasi antar entitas, koneksi equipment-dokumen, network, data lengkap satu equipment
@@ -189,12 +190,14 @@ Konteks percakapan sebelumnya:
 Pertanyaan: {message}
 
 Jawab HANYA satu kata: rag / sql / graph / hybrid / general"""
-        }]
-    )
-    intent = resp.choices[0].message.content.strip().lower()
-    if intent not in ("rag", "sql", "graph", "hybrid", "general"):
-        intent = "hybrid"
-    return intent
+            }]
+        )
+        intent = resp.choices[0].message.content.strip().lower()
+        if intent not in ("rag", "sql", "graph", "hybrid", "general"):
+            intent = "hybrid"
+        return intent
+    except Exception:
+        return "hybrid"
 
 # ─── RAG Handler ──────────────────────────────────────────────────────────────
 
