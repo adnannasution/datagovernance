@@ -54,8 +54,94 @@
 
   <div id="search-status" class="search-status hidden"></div>
 
-  <div id="results-container"></div>
+  <!-- Tab buttons (hidden until search fires) -->
+  <div id="result-tabs" class="result-tabs hidden">
+    <button id="tab-doc" class="result-tab-btn active" onclick="switchTab('doc')">
+      Dokumen <span id="tab-doc-count" class="tab-count">0</span>
+    </button>
+    <button id="tab-graph" class="result-tab-btn" onclick="switchTab('graph')">
+      Equipment &amp; Graph <span id="tab-graph-count" class="tab-count">0</span>
+    </button>
+  </div>
+
+  <div id="results-doc" class="results-panel"></div>
+  <div id="results-graph" class="results-panel hidden"></div>
 </div>
+
+<style>
+.result-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 8px 0;
+  border-bottom: 2px solid var(--border, #e5e7eb);
+  padding-bottom: 0;
+}
+.result-tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 18px 10px 18px;
+  font-size: 0.97rem;
+  font-weight: 500;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.result-tab-btn.active {
+  color: var(--primary, #2563eb);
+  border-bottom-color: var(--primary, #2563eb);
+}
+.result-tab-btn:hover:not(.active) {
+  color: var(--text, #111827);
+}
+.tab-count {
+  display: inline-block;
+  background: var(--border, #e5e7eb);
+  color: var(--text-muted, #6b7280);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 5px;
+}
+.result-tab-btn.active .tab-count {
+  background: var(--primary-light, #dbeafe);
+  color: var(--primary, #2563eb);
+}
+.results-panel.hidden { display: none; }
+
+/* Equipment graph cards */
+.eq-result-card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  display: flex;
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+.eq-result-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.09); }
+.eq-result-card.has-bad-actor { border-left: 4px solid #ef4444; }
+.eq-result-card:not(.has-bad-actor) { border-left: 4px solid var(--border, #e5e7eb); }
+.eq-card-body { padding: 14px 16px; flex: 1; }
+.eq-card-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.eq-tag {
+  font-family: monospace;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--primary, #2563eb);
+}
+.eq-description { color: var(--text, #111827); font-size: 0.95rem; margin-bottom: 8px; }
+.eq-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-muted, #6b7280); margin-top: 6px; }
+.eq-stat-item { display: flex; align-items: center; gap: 4px; }
+.badge-criticality-high   { background: #fee2e2; color: #b91c1c; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.badge-criticality-medium { background: #fef9c3; color: #92400e; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.badge-criticality-low    { background: #dcfce7; color: #166534; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.badge-criticality-unknown{ background: #f3f4f6; color: #6b7280; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.eq-detail-link { font-size: 0.82rem; color: var(--primary, #2563eb); text-decoration: none; margin-left: auto; white-space: nowrap; }
+.eq-detail-link:hover { text-decoration: underline; }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -67,6 +153,13 @@ document.getElementById('query').addEventListener('keydown', e => {
 function setQuery(q) {
   document.getElementById('query').value = q;
   doSearch();
+}
+
+function switchTab(tab) {
+  document.getElementById('tab-doc').classList.toggle('active', tab === 'doc');
+  document.getElementById('tab-graph').classList.toggle('active', tab === 'graph');
+  document.getElementById('results-doc').classList.toggle('hidden', tab !== 'doc');
+  document.getElementById('results-graph').classList.toggle('hidden', tab !== 'graph');
 }
 
 async function doSearch() {
@@ -81,71 +174,136 @@ async function doSearch() {
   status.classList.remove('hidden');
   status.textContent = 'Mengambil embedding dan mencari dokumen relevan...';
 
-  // Show skeleton loading cards
-  document.getElementById('results-container').innerHTML = [1,2,3].map(() => `
+  // Show skeleton loading cards in doc panel
+  const skeletonHtml = [1,2,3].map(() => `
     <div class="skeleton-card">
       <div class="skeleton-line w-3-4"></div>
       <div class="skeleton-line w-full h-3"></div>
       <div class="skeleton-line w-full h-3"></div>
       <div class="skeleton-line w-1-2 h-3"></div>
     </div>`).join('');
+  document.getElementById('results-doc').innerHTML = skeletonHtml;
+  document.getElementById('results-graph').innerHTML = skeletonHtml;
+
+  // Show tabs
+  document.getElementById('result-tabs').classList.remove('hidden');
+  switchTab('doc');
+
+  const ru = document.getElementById('f-ru').value || '';
 
   try {
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query,
-        ru: document.getElementById('f-ru').value || null,
-        tipe: document.getElementById('f-tipe').value || null,
-        tag_number: document.getElementById('f-tag').value.trim() || null,
-        limit: 10,
-        threshold: 0.35
-      })
-    });
-    const data = await res.json();
+    const [docRes, graphRes] = await Promise.all([
+      fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          ru: ru || null,
+          tipe: document.getElementById('f-tipe').value || null,
+          tag_number: document.getElementById('f-tag').value.trim() || null,
+          limit: 10,
+          threshold: 0.35
+        })
+      }),
+      fetch(`/api/search/graph?q=${encodeURIComponent(query)}&ru=${encodeURIComponent(ru)}&limit=10`)
+    ]);
 
-    if (!res.ok) throw new Error(data.detail || 'Search gagal');
+    const docData = await docRes.json();
+    const graphData = await graphRes.json();
 
-    status.textContent = `${data.total} hasil ditemukan untuk "${data.query}"`;
+    if (!docRes.ok) throw new Error(docData.detail || 'Search gagal');
 
-    if (data.results.length === 0) {
-      document.getElementById('results-container').innerHTML = `
+    const docTotal = docData.total || 0;
+    const graphTotal = graphData.total || 0;
+
+    status.textContent = `${docTotal} dokumen dan ${graphTotal} equipment ditemukan untuk "${query}"`;
+
+    // Update tab counts
+    document.getElementById('tab-doc-count').textContent = docTotal;
+    document.getElementById('tab-graph-count').textContent = graphTotal;
+
+    // Render doc results
+    if (docData.results.length === 0) {
+      document.getElementById('results-doc').innerHTML = `
         <div class="empty-search">
           <svg class="empty-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          <div class="empty-search-title">Tidak ada hasil ditemukan</div>
+          <div class="empty-search-title">Tidak ada dokumen ditemukan</div>
           <div class="empty-search-desc">Coba ubah kata kunci atau pilih filter yang berbeda.</div>
         </div>`;
-      return;
+    } else {
+      document.getElementById('results-doc').innerHTML = docData.results.map((r, i) => {
+        const score = Math.round(r.score * 100);
+        const loc = r.halaman ? `Halaman ${r.halaman}` :
+                    r.slide_number ? `Slide ${r.slide_number}` :
+                    r.sheet_name ? `Sheet: ${r.sheet_name}` : '';
+        const locLabel = r.slide_title ? `Slide ${r.slide_number}: ${r.slide_title}` : loc;
+        return `
+        <div class="result-card">
+          <div class="result-card-accent"></div>
+          <div class="result-card-body">
+            <div class="result-meta">
+              <div class="result-meta-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
+              ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
+              <span class="badge badge-tipe">${r.tipe_dokumen}</span>
+              ${locLabel ? `<span class="result-loc">${locLabel}</span>` : ''}
+            </div>
+            <div class="result-content">${highlight(r.content, query)}</div>
+            <div class="result-footer">
+              <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
+              <span class="score-label">${score}% relevan</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
     }
 
-    document.getElementById('results-container').innerHTML = data.results.map((r, i) => {
-      const score = Math.round(r.score * 100);
-      const loc = r.halaman ? `Halaman ${r.halaman}` :
-                  r.slide_number ? `Slide ${r.slide_number}` :
-                  r.sheet_name ? `Sheet: ${r.sheet_name}` : '';
-      const locLabel = r.slide_title ? `Slide ${r.slide_number}: ${r.slide_title}` : loc;
-      return `
-      <div class="result-card">
-        <div class="result-card-accent"></div>
-        <div class="result-card-body">
-          <div class="result-meta">
-            <div class="result-meta-icon">
-              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    // Render graph/equipment results
+    if (!graphRes.ok || !graphData.results || graphData.results.length === 0) {
+      document.getElementById('results-graph').innerHTML = `
+        <div class="empty-search">
+          <svg class="empty-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          <div class="empty-search-title">Tidak ada equipment ditemukan</div>
+          <div class="empty-search-desc">Coba ubah kata kunci pencarian.</div>
+        </div>`;
+    } else {
+      document.getElementById('results-graph').innerHTML = graphData.results.map(eq => {
+        const hasBadActor = (eq.bad_actor_count || 0) > 0;
+        const crit = (eq.criticality || '').toLowerCase();
+        let critBadge = '';
+        if (crit.includes('high') || crit === 'h') {
+          critBadge = `<span class="badge-criticality-high">High</span>`;
+        } else if (crit.includes('med') || crit === 'm') {
+          critBadge = `<span class="badge-criticality-medium">Medium</span>`;
+        } else if (crit.includes('low') || crit === 'l') {
+          critBadge = `<span class="badge-criticality-low">Low</span>`;
+        } else if (eq.criticality) {
+          critBadge = `<span class="badge-criticality-unknown">${eq.criticality}</span>`;
+        }
+        const plant = eq.maintenance_plant || '';
+        return `
+        <div class="eq-result-card${hasBadActor ? ' has-bad-actor' : ''}">
+          <div class="eq-card-body">
+            <div class="eq-card-header">
+              <span class="eq-tag">${eq.tag_number || '-'}</span>
+              ${plant ? `<span class="badge badge-ru">${plant}</span>` : ''}
+              ${critBadge}
+              <a href="/equipment/${encodeURIComponent(eq.tag_number)}" class="eq-detail-link">Lihat Detail →</a>
             </div>
-            <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
-            ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
-            <span class="badge badge-tipe">${r.tipe_dokumen}</span>
-            ${locLabel ? `<span class="result-loc">${locLabel}</span>` : ''}
+            <div class="eq-description">${eq.description || '<em>Tidak ada deskripsi</em>'}</div>
+            <div class="eq-stats">
+              <span class="eq-stat-item">📋 Bad Actor: ${eq.bad_actor_count || 0}</span>
+              <span class="eq-stat-item">🔧 WO: ${eq.wo_count || 0}</span>
+              <span class="eq-stat-item">⚠ ICU: ${eq.icu_count || 0}</span>
+              <span class="eq-stat-item">🔔 Notif: ${eq.notif_count || 0}</span>
+              <span class="eq-stat-item">📄 Docs: ${eq.doc_count || 0}</span>
+            </div>
           </div>
-          <div class="result-content">${highlight(r.content, query)}</div>
-          <div class="result-footer">
-            <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
-            <span class="score-label">${score}% relevan</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
+        </div>`;
+      }).join('');
+    }
 
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
