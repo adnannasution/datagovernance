@@ -623,3 +623,9 @@ async def api_bulk_approve(request: Request):
     validated_by = body.get("validated_by", "user")
     approved = _db_tm.bulk_approve(ids, validated_by)
     return {"approved": approved}
+
+@app.post("/api/neo4j/reset-relations")
+async def api_reset_relations():
+    from neo4j_sync import reset_all_relations
+    result = reset_all_relations()
+    return result

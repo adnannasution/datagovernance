@@ -807,3 +807,21 @@ def get_coverage_stats() -> dict:
         "overall_pct": round(total_connected * 100 / total_pg, 1) if total_pg > 0 else 0,
         "neo4j_counts": neo4j_counts,
     }
+
+# ─── Reset All Relations ──────────────────────────────────────────────────────
+
+def reset_all_relations() -> dict:
+    """Hapus semua relasi di Neo4j kecuali yang antar Equipment node."""
+    try:
+        with get_driver() as driver:
+            with driver.session() as session:
+                result = session.run("""
+                    MATCH ()-[r]->()
+                    DELETE r
+                    RETURN count(r) as deleted
+                """)
+                row = result.single()
+                deleted = row["deleted"] if row else 0
+                return {"success": True, "deleted": deleted}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
