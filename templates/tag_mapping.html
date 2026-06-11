@@ -29,7 +29,7 @@
     </button>
     <select id="select-table" style="padding:.45rem .75rem;border-radius:6px;border:1px solid var(--border);font-size:.85rem;background:var(--bg-card)">
       <option value="">— Pilih tabel spesifik —</option>
-      {% for t in table_list %}
+      {% for t in all_tables %}
       <option value="{{ t }}">{{ t }}</option>
       {% endfor %}
     </select>
