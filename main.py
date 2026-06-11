@@ -37,15 +37,14 @@ RU_LIST = [
 @app.get("/", response_class=HTMLResponse)
 async def page_dashboard(request: Request):
     stats = db.get_dashboard_stats()
-    return templates.TemplateResponse("index.html", {
-        "request": request, "stats": stats,
+    return templates.TemplateResponse(request, "index.html", {
+        "stats": stats,
         "title": "Dashboard"
     })
 
 @app.get("/upload", response_class=HTMLResponse)
 async def page_upload(request: Request):
-    return templates.TemplateResponse("upload.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "upload.html", {
         "tipe_list": TIPE_DOKUMEN_LIST,
         "ru_list": RU_LIST,
         "title": "Upload Dokumen"
@@ -63,8 +62,8 @@ async def page_library(request: Request,
         status=status or None, search=search or None,
         limit=limit, offset=offset
     )
-    return templates.TemplateResponse("library.html", {
-        "request": request, "docs": docs,
+    return templates.TemplateResponse(request, "library.html", {
+        "docs": docs,
         "total": total, "page": page,
         "total_pages": (total + limit - 1) // limit,
         "ru_list": RU_LIST, "tipe_list": TIPE_DOKUMEN_LIST,
@@ -74,8 +73,7 @@ async def page_library(request: Request,
 
 @app.get("/search", response_class=HTMLResponse)
 async def page_search(request: Request):
-    return templates.TemplateResponse("search.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "search.html", {
         "ru_list": RU_LIST,
         "tipe_list": TIPE_DOKUMEN_LIST,
         "title": "Smart Search"
@@ -89,8 +87,8 @@ async def page_detail(request: Request, doc_id: int):
     tags = db.get_tag_links(doc_id)
     chunks = db.get_chunks_preview(doc_id, limit=5)
     versions = db.get_versions(doc_id)
-    return templates.TemplateResponse("detail.html", {
-        "request": request, "doc": doc,
+    return templates.TemplateResponse(request, "detail.html", {
+        "doc": doc,
         "tags": tags, "chunks": chunks,
         "versions": versions,
         "title": doc["judul"]
@@ -316,8 +314,8 @@ from db_equipment import (
 @app.get("/governance", response_class=HTMLResponse)
 async def page_governance(request: Request):
     overview = get_governance_overview()
-    return templates.TemplateResponse("governance.html", {
-        "request": request, "overview": overview,
+    return templates.TemplateResponse(request, "governance.html", {
+        "overview": overview,
         "title": "Data Governance"
     })
 
@@ -326,8 +324,8 @@ async def page_catalog(request: Request, domain: str = ""):
     stats = get_catalog_stats()
     if domain:
         stats = [s for s in stats if s["domain"] == domain]
-    return templates.TemplateResponse("catalog.html", {
-        "request": request, "stats": stats,
+    return templates.TemplateResponse(request, "catalog.html", {
+        "stats": stats,
         "domain_list": DOMAIN_ORDER,
         "active_domain": domain,
         "title": "Data Catalog"
@@ -345,8 +343,7 @@ async def page_table_detail(request: Request, table_name: str,
     rows, total = get_table_rows(table_name, search=search or None,
                                   limit=limit, offset=offset)
     quality = get_data_quality(table_name, tbl_meta.get("tag_col"))
-    return templates.TemplateResponse("table_detail.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "table_detail.html", {
         "tbl": tbl_meta,
         "cols": cols,
         "rows": rows,
@@ -362,8 +359,7 @@ async def page_table_detail(request: Request, table_name: str,
 async def page_equipment_list(request: Request, q: str = "", plant: str = ""):
     equipment = search_equipment(q=q, plant=plant, limit=100) if (q or plant) else []
     plants = get_plant_list()
-    return templates.TemplateResponse("equipment_list.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "equipment_list.html", {
         "equipment": equipment,
         "plants": plants,
         "q": q, "plant": plant,
@@ -381,8 +377,7 @@ async def page_equipment_360(request: Request, tag: str):
         doc_links = get_tag_links.__module__  # cek apakah ada
     except Exception:
         doc_links = []
-    return templates.TemplateResponse("equipment_360.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "equipment_360.html", {
         "tag": tag,
         "data": data,
         "title": f"Equipment 360° — {tag}"
@@ -414,8 +409,7 @@ from neo4j_sync import get_neo4j_stats, full_sync, ensure_constraints, test_conn
 @app.get("/knowledge-graph", response_class=HTMLResponse)
 async def page_knowledge_graph(request: Request):
     stats = get_neo4j_stats()
-    return templates.TemplateResponse("knowledge_graph.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "knowledge_graph.html", {
         "stats": stats,
         "title": "Knowledge Graph"
     })
@@ -455,8 +449,7 @@ from chatbot import chat as chatbot_chat
 
 @app.get("/chat", response_class=HTMLResponse)
 async def page_chat(request: Request):
-    return templates.TemplateResponse("chat.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "chat.html", {
         "title": "AI Assistant"
     })
 
