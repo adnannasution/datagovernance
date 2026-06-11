@@ -387,8 +387,119 @@ def sync_all_tables(progress_callback=None):
     return summary
 
 
-def get_graph_for_tag(tag: str):
-    """Query Neo4j for 1-hop neighborhood of an Equipment node. Returns vis.js format."""
+def sync_domain_relations() -> dict:
+    """
+    Create cross-table relationships in Neo4j:
+    1. SAPNotification -[:GENERATED_WO]-> SAPWorkOrder
+    2. BadActor -[:HAS_IRKAP]-> IRKAPProgram
+    3. IRKAPProgram -[:HAS_ACTUAL]-> IRKAPActual
+    Returns summary dict with counts of relations created per type.
+    """
+    from db_equipment import get_conn
+
+    summary = {
+        "GENERATED_WO": 0,
+        "HAS_IRKAP": 0,
+        "HAS_ACTUAL": 0,
+    }
+
+    driver = get_driver()
+    if driver is None:
+        return {"error": "Neo4j connection unavailable", **summary}
+
+    try:
+        with get_conn() as conn:
+            # 1. SAPNotification -[:GENERATED_WO]-> SAPWorkOrder
+            rows = conn.execute(
+                "SELECT DISTINCT order_no FROM sap_notifications WHERE order_no IS NOT NULL AND order_no != ''"
+            ).fetchall()
+            order_nos = [r["order_no"] for r in rows]
+
+            chunk_size = 500
+            created_gw = 0
+            for i in range(0, len(order_nos), chunk_size):
+                chunk = order_nos[i:i + chunk_size]
+                with driver.session() as session:
+                    result = session.run(
+                        """
+                        UNWIND $order_nos AS order_no
+                        MATCH (n:SAPNotification) WHERE n.order_no = order_no
+                        MATCH (w:SAPWorkOrder) WHERE w.order_no = order_no
+                        MERGE (n)-[r:GENERATED_WO]->(w)
+                        RETURN count(r) AS cnt
+                        """,
+                        order_nos=chunk
+                    )
+                    rec = result.single()
+                    if rec:
+                        created_gw += rec["cnt"]
+            summary["GENERATED_WO"] = created_gw
+
+            # 2. BadActor -[:HAS_IRKAP]-> IRKAPProgram
+            rows = conn.execute(
+                """
+                SELECT DISTINCT ba.no_irkap, ip.no_program_kerja
+                FROM bad_actor_monitoring ba
+                JOIN irkap_program ip ON ba.no_irkap = ip.no_program_kerja
+                WHERE ba.no_irkap IS NOT NULL AND ba.no_irkap != ''
+                """
+            ).fetchall()
+            pairs = [{"no_irkap": r["no_irkap"], "no_program_kerja": r["no_program_kerja"]} for r in rows]
+
+            created_hi = 0
+            for i in range(0, len(pairs), chunk_size):
+                chunk = pairs[i:i + chunk_size]
+                with driver.session() as session:
+                    result = session.run(
+                        """
+                        UNWIND $pairs AS pair
+                        MATCH (ba:BadActor) WHERE ba.no_irkap = pair.no_irkap
+                        MATCH (ip:IRKAPProgram) WHERE ip.no_program_kerja = pair.no_program_kerja
+                        MERGE (ba)-[r:HAS_IRKAP]->(ip)
+                        RETURN count(r) AS cnt
+                        """,
+                        pairs=chunk
+                    )
+                    rec = result.single()
+                    if rec:
+                        created_hi += rec["cnt"]
+            summary["HAS_IRKAP"] = created_hi
+
+            # 3. IRKAPProgram -[:HAS_ACTUAL]-> IRKAPActual
+            rows = conn.execute(
+                "SELECT DISTINCT no_program FROM irkap_actual WHERE no_program IS NOT NULL"
+            ).fetchall()
+            no_programs = [r["no_program"] for r in rows]
+
+            created_ha = 0
+            for i in range(0, len(no_programs), chunk_size):
+                chunk = no_programs[i:i + chunk_size]
+                with driver.session() as session:
+                    result = session.run(
+                        """
+                        UNWIND $no_programs AS no_program
+                        MATCH (ip:IRKAPProgram) WHERE ip.no_program_kerja = no_program
+                        MATCH (ia:IRKAPActual) WHERE ia.no_program = no_program
+                        MERGE (ip)-[r:HAS_ACTUAL]->(ia)
+                        RETURN count(r) AS cnt
+                        """,
+                        no_programs=chunk
+                    )
+                    rec = result.single()
+                    if rec:
+                        created_ha += rec["cnt"]
+            summary["HAS_ACTUAL"] = created_ha
+
+    except Exception as e:
+        summary["error"] = str(e)
+    finally:
+        driver.close()
+
+    return summary
+
+
+def get_graph_for_tag(tag: str, depth: int = 1):
+    """Query Neo4j for 1-hop (depth=1) or 2-hop (depth=2) neighborhood of an Equipment node. Returns vis.js format."""
     driver = get_driver()
     if driver is None:
         return {"nodes": [], "edges": [], "error": "Neo4j connection unavailable"}
@@ -512,6 +623,83 @@ def get_graph_for_tag(tag: str):
                     "to": eq_id,
                     "label": rel_type,
                 })
+
+            # depth=2: include 2nd-hop nodes via GENERATED_WO, HAS_IRKAP, HAS_ACTUAL
+            if depth >= 2:
+                # SAPNotification -[:GENERATED_WO]-> SAPWorkOrder (2nd hop)
+                hop2_gw = session.run(
+                    """
+                    MATCH (e:Equipment {tag_number: $tag})<-[:HAS_NOTIFICATION]-(n:SAPNotification)-[:GENERATED_WO]->(wo2:SAPWorkOrder)
+                    RETURN id(n) AS src_id, id(wo2) AS node_id, labels(wo2) AS node_labels, properties(wo2) AS props
+                    LIMIT 100
+                    """,
+                    tag=tag
+                )
+                for record in hop2_gw:
+                    node_id = record["node_id"]
+                    node_labels = record["node_labels"]
+                    props = dict(record["props"])
+                    src_vis_id = f"N:{record['src_id']}"
+                    vis_node_id = f"N:{node_id}"
+                    group = node_labels[0] if node_labels else "Unknown"
+                    label_val = (props.get("order_no") or props.get("description") or group)
+                    if label_val and len(str(label_val)) > 20:
+                        label_val = str(label_val)[:17] + "..."
+                    title_parts = [f"{k}: {v}" for k, v in list(props.items())[:6] if v is not None]
+                    if vis_node_id not in seen_node_ids:
+                        nodes.append({"id": vis_node_id, "label": str(label_val), "group": group, "title": "\n".join(title_parts)})
+                        seen_node_ids.add(vis_node_id)
+                    edges.append({"from": src_vis_id, "to": vis_node_id, "label": "GENERATED_WO"})
+
+                # BadActor -[:HAS_IRKAP]-> IRKAPProgram (2nd hop)
+                hop2_irkap = session.run(
+                    """
+                    MATCH (e:Equipment {tag_number: $tag})<-[:HAS_BAD_ACTOR]-(ba:BadActor)-[:HAS_IRKAP]->(irkap_prog:IRKAPProgram)
+                    RETURN id(ba) AS src_id, id(irkap_prog) AS node_id, labels(irkap_prog) AS node_labels, properties(irkap_prog) AS props
+                    LIMIT 50
+                    """,
+                    tag=tag
+                )
+                for record in hop2_irkap:
+                    node_id = record["node_id"]
+                    node_labels = record["node_labels"]
+                    props = dict(record["props"])
+                    src_vis_id = f"N:{record['src_id']}"
+                    vis_node_id = f"N:{node_id}"
+                    group = node_labels[0] if node_labels else "Unknown"
+                    label_val = (props.get("no_program_kerja") or props.get("program_kerja") or group)
+                    if label_val and len(str(label_val)) > 20:
+                        label_val = str(label_val)[:17] + "..."
+                    title_parts = [f"{k}: {v}" for k, v in list(props.items())[:6] if v is not None]
+                    if vis_node_id not in seen_node_ids:
+                        nodes.append({"id": vis_node_id, "label": str(label_val), "group": group, "title": "\n".join(title_parts)})
+                        seen_node_ids.add(vis_node_id)
+                    edges.append({"from": src_vis_id, "to": vis_node_id, "label": "HAS_IRKAP"})
+
+                # IRKAPProgram -[:HAS_ACTUAL]-> IRKAPActual (3rd hop from equipment via BadActor or HAS_IRKAP)
+                hop2_actual = session.run(
+                    """
+                    MATCH (e:Equipment {tag_number: $tag})<-[:HAS_BAD_ACTOR]-(ba:BadActor)-[:HAS_IRKAP]->(ip:IRKAPProgram)-[:HAS_ACTUAL]->(irkap_act:IRKAPActual)
+                    RETURN id(ip) AS src_id, id(irkap_act) AS node_id, labels(irkap_act) AS node_labels, properties(irkap_act) AS props
+                    LIMIT 50
+                    """,
+                    tag=tag
+                )
+                for record in hop2_actual:
+                    node_id = record["node_id"]
+                    node_labels = record["node_labels"]
+                    props = dict(record["props"])
+                    src_vis_id = f"N:{record['src_id']}"
+                    vis_node_id = f"N:{node_id}"
+                    group = node_labels[0] if node_labels else "Unknown"
+                    label_val = (props.get("no_program") or props.get("program_kerja") or group)
+                    if label_val and len(str(label_val)) > 20:
+                        label_val = str(label_val)[:17] + "..."
+                    title_parts = [f"{k}: {v}" for k, v in list(props.items())[:6] if v is not None]
+                    if vis_node_id not in seen_node_ids:
+                        nodes.append({"id": vis_node_id, "label": str(label_val), "group": group, "title": "\n".join(title_parts)})
+                        seen_node_ids.add(vis_node_id)
+                    edges.append({"from": src_vis_id, "to": vis_node_id, "label": "HAS_ACTUAL"})
 
     except Exception as e:
         return {"nodes": nodes, "edges": edges, "error": str(e)}

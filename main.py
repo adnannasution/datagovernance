@@ -456,11 +456,11 @@ def _run_table_sync():
         _table_sync_running = False
 
 @app.get("/api/neo4j/graph")
-async def api_neo4j_graph(tag: str = ""):
+async def api_neo4j_graph(tag: str = "", depth: int = 1):
     if not tag:
         raise HTTPException(status_code=400, detail="tag parameter required")
     from neo4j_sync import get_graph_for_tag
-    return get_graph_for_tag(tag)
+    return get_graph_for_tag(tag, depth=depth)
 
 @app.post("/api/neo4j/sync/tables")
 async def api_sync_all_tables(background_tasks: BackgroundTasks):
@@ -473,6 +473,30 @@ async def api_sync_all_tables(background_tasks: BackgroundTasks):
 @app.get("/api/neo4j/sync/tables/status")
 async def api_sync_tables_status():
     return {"running": _table_sync_running, "last_result": _last_table_sync_result}
+
+_domain_rel_running = False
+_last_domain_rel_result = None
+
+def _run_domain_relations():
+    global _domain_rel_running, _last_domain_rel_result
+    _domain_rel_running = True
+    try:
+        from neo4j_sync import sync_domain_relations
+        _last_domain_rel_result = sync_domain_relations()
+    finally:
+        _domain_rel_running = False
+
+@app.post("/api/neo4j/sync/domain-relations")
+async def api_sync_domain_relations(background_tasks: BackgroundTasks):
+    from neo4j_sync import get_driver
+    if get_driver() is None:
+        raise HTTPException(status_code=503, detail="Neo4j tidak dapat diakses")
+    background_tasks.add_task(_run_domain_relations)
+    return {"message": "Sync domain relations dimulai di background"}
+
+@app.get("/api/neo4j/sync/domain-relations/status")
+async def api_domain_relations_status():
+    return {"running": _domain_rel_running, "last_result": _last_domain_rel_result}
 
 # ─── CHATBOT ROUTES ──────────────────────────────────────────────────────────
 
