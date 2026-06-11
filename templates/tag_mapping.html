@@ -63,96 +63,119 @@
   <a href="/tag-mapping" class="btn btn-secondary">Reset</a>
 </form>
 
+{# ── Grouped mapping cards ─────────────────────────────────────── #}
+{% if groups %}
+  {% for group in groups %}
+  <div class="card mapping-group" style="margin-bottom:1rem;padding:0;overflow:hidden">
+    {# Group header #}
+    <div style="background:var(--surface-2,#f8f9fa);padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <strong style="font-size:15px;color:var(--text-primary,#2c3e50);font-family:monospace">{{ group.tag_canonical }}</strong>
+          <span style="color:var(--text-muted);font-size:.85rem">{{ group.description }}</span>
+          <span class="badge badge-tipe" style="background:#e8f4fd;color:#2980b9;font-size:.75rem">{{ group.maintenance_plant }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span style="color:var(--text-muted);font-size:.8rem">{{ group.variant_count }} variant
+            {% if group.pending_count > 0 %}
+              · <span style="color:#ca8a04;font-weight:600">{{ group.pending_count }} pending</span>
+            {% endif %}
+          </span>
+          {% if group.pending_count > 0 %}
+          <button class="btn btn-primary" style="font-size:.78rem;padding:.3rem .75rem"
+                  onclick="approveGroup('{{ group.tag_canonical }}', [{% for v in group.variants %}{% if v.status == 'pending' %}{{ v.id }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}])">
+            ✓ Approve Semua Pending
+          </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Variants table #}
+    <div class="table-wrap" style="margin:0">
+      <table class="data-table" style="margin:0">
+        <thead>
+          <tr>
+            <th style="width:36px">
+              <input type="checkbox" class="group-check" data-group="{{ group.tag_canonical }}" onchange="toggleGroup(this)"/>
+            </th>
+            <th>Tag Variant</th>
+            <th>Source Table</th>
+            <th>Confidence</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th style="width:100px">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in group.variants %}
+          <tr id="row-{{ v.id }}">
+            <td onclick="event.stopPropagation()">
+              <input type="checkbox" class="row-chk" value="{{ v.id }}" onchange="updateBulkCount()"/>
+            </td>
+            <td><code style="font-size:.82rem">{{ v.tag_variant }}</code></td>
+            <td><span class="badge badge-tipe" style="font-size:.75rem">{{ v.source_table }}</span></td>
+            <td>
+              {% set conf = v.confidence | float %}
+              {% if conf >= 0.95 %}
+                <span class="badge" style="background:#16a34a;color:#fff">{{ '%.3f'|format(conf) }}</span>
+              {% elif conf >= 0.85 %}
+                <span class="badge" style="background:#ca8a04;color:#fff">{{ '%.3f'|format(conf) }}</span>
+              {% else %}
+                <span class="badge" style="background:#dc2626;color:#fff">{{ '%.3f'|format(conf) }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if v.match_method == 'exact' %}
+                <span class="badge" style="background:#2563eb;color:#fff">exact</span>
+              {% elif v.match_method == 'fuzzy_token' %}
+                <span class="badge" style="background:#16a34a;color:#fff">token</span>
+              {% else %}
+                <span class="badge" style="background:#ca8a04;color:#fff">levenshtein</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if v.status == 'approved' %}
+                <span class="badge badge-ready">approved</span>
+              {% elif v.status == 'pending' %}
+                <span class="badge badge-processing">pending</span>
+              {% else %}
+                <span class="badge badge-error">rejected</span>
+              {% endif %}
+            </td>
+            <td onclick="event.stopPropagation()" style="white-space:nowrap">
+              {% if v.status == 'pending' %}
+              <button class="btn-icon" style="color:#16a34a" title="Approve"
+                      onclick="singleAction({{ v.id }}, 'approve')">✓</button>
+              <button class="btn-icon danger" title="Reject"
+                      onclick="singleAction({{ v.id }}, 'reject')">✗</button>
+              {% elif v.status == 'approved' %}
+              <button class="btn-icon danger" title="Reject"
+                      onclick="singleAction({{ v.id }}, 'reject')">✗</button>
+              {% else %}
+              <button class="btn-icon" style="color:#16a34a" title="Approve"
+                      onclick="singleAction({{ v.id }}, 'approve')">✓</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted)">
+    Tidak ada data ditemukan
+  </div>
+{% endif %}
+
 {# ── Bulk actions bar ──────────────────────────────────────────── #}
-<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
-  <label style="font-size:.85rem;color:var(--text-muted)">
-    <input type="checkbox" id="chk-all" onchange="toggleAll(this)"/> Pilih Semua
-  </label>
+<div style="display:flex;align-items:center;gap:.75rem;margin-top:.75rem;margin-bottom:.75rem">
   <button class="btn btn-primary" onclick="bulkApprove()" style="font-size:.8rem;padding:.35rem .9rem">
     ✓ Approve Pilihan
   </button>
   <span id="bulk-count" style="font-size:.8rem;color:var(--text-muted)">0 dipilih</span>
-</div>
-
-{# ── Data table ────────────────────────────────────────────────── #}
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th style="width:36px"></th>
-        <th>No</th>
-        <th>Tag Canonical (SAP)</th>
-        <th>Deskripsi Equipment</th>
-        <th>Tag Variant</th>
-        <th>Source Table</th>
-        <th>Confidence</th>
-        <th>Method</th>
-        <th>Status</th>
-        <th style="width:100px">Aksi</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in mappings %}
-      <tr id="row-{{ row.id }}">
-        <td onclick="event.stopPropagation()">
-          <input type="checkbox" class="row-chk" value="{{ row.id }}" onchange="updateBulkCount()"/>
-        </td>
-        <td>{{ offset + loop.index }}</td>
-        <td><code style="font-size:.82rem">{{ row.tag_canonical }}</code></td>
-        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            title="{{ row.description or '' }}">
-          {{ row.description or '—' }}
-        </td>
-        <td><code style="font-size:.82rem">{{ row.tag_variant }}</code></td>
-        <td><span class="badge badge-tipe" style="font-size:.75rem">{{ row.source_table }}</span></td>
-        <td>
-          {% set conf = row.confidence | float %}
-          {% if conf >= 0.95 %}
-            <span class="badge" style="background:#16a34a;color:#fff">{{ '%.3f'|format(conf) }}</span>
-          {% elif conf >= 0.85 %}
-            <span class="badge" style="background:#ca8a04;color:#fff">{{ '%.3f'|format(conf) }}</span>
-          {% else %}
-            <span class="badge" style="background:#dc2626;color:#fff">{{ '%.3f'|format(conf) }}</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.match_method == 'exact' %}
-            <span class="badge" style="background:#2563eb;color:#fff">exact</span>
-          {% elif row.match_method == 'fuzzy_token' %}
-            <span class="badge" style="background:#16a34a;color:#fff">token</span>
-          {% else %}
-            <span class="badge" style="background:#ca8a04;color:#fff">levenshtein</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.status == 'approved' %}
-            <span class="badge badge-ready">approved</span>
-          {% elif row.status == 'pending' %}
-            <span class="badge badge-processing">pending</span>
-          {% else %}
-            <span class="badge badge-error">rejected</span>
-          {% endif %}
-        </td>
-        <td onclick="event.stopPropagation()" style="white-space:nowrap">
-          {% if row.status == 'pending' %}
-          <button class="btn-icon" style="color:#16a34a" title="Approve"
-                  onclick="singleAction({{ row.id }}, 'approve')">✓</button>
-          <button class="btn-icon danger" title="Reject"
-                  onclick="singleAction({{ row.id }}, 'reject')">✗</button>
-          {% elif row.status == 'approved' %}
-          <button class="btn-icon danger" title="Reject"
-                  onclick="singleAction({{ row.id }}, 'reject')">✗</button>
-          {% else %}
-          <button class="btn-icon" style="color:#16a34a" title="Approve"
-                  onclick="singleAction({{ row.id }}, 'approve')">✓</button>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="10" class="empty-text">Tidak ada data ditemukan</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </div>
 
 {# ── Pagination ────────────────────────────────────────────────── #}
@@ -163,7 +186,7 @@
      class="btn btn-secondary">← Prev</a>
   {% endif %}
   <span class="page-info">
-    Halaman {{ page }} dari {{ total_pages }} ({{ total }} mappings)
+    Halaman {{ page }} dari {{ total_pages }} ({{ total_groups }} grup tag canonical)
   </span>
   {% if page < total_pages %}
   <a href="?page={{ page + 1 }}&ru={{ filters.ru }}&source_table={{ filters.source_table }}&status={{ filters.status }}"
@@ -172,7 +195,7 @@
 </div>
 {% else %}
 <div class="pagination">
-  <span class="page-info">{{ total }} mappings</span>
+  <span class="page-info">{{ total_groups }} grup tag canonical</span>
 </div>
 {% endif %}
 
@@ -239,17 +262,37 @@ async function singleAction(id, action) {
   }
 }
 
-// ── Bulk select ────────────────────────────────────────────────────
-function toggleAll(masterChk) {
-  document.querySelectorAll('.row-chk').forEach(c => c.checked = masterChk.checked);
+// ── Approve all pending in a group ────────────────────────────────
+async function approveGroup(canonical, ids) {
+  if (!ids.length) return;
+  if (!confirm(`Approve ${ids.length} mapping pending untuk ${canonical}?`)) return;
+  const res = await fetch('/api/tag-mapping/bulk-approve', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ids: ids, validated_by: 'engineer'})
+  });
+  if (res.ok) {
+    location.reload();
+  } else {
+    alert('Gagal approve group: ' + (await res.text()));
+  }
+}
+
+// ── Group checkbox toggle ──────────────────────────────────────────
+function toggleGroup(masterChk) {
+  const group = masterChk.dataset.group;
+  // Find all row checkboxes within the same group card
+  const card = masterChk.closest('.mapping-group');
+  if (card) {
+    card.querySelectorAll('.row-chk').forEach(c => c.checked = masterChk.checked);
+  }
   updateBulkCount();
 }
 
+// ── Bulk select count ──────────────────────────────────────────────
 function updateBulkCount() {
   const n = document.querySelectorAll('.row-chk:checked').length;
   document.getElementById('bulk-count').textContent = n + ' dipilih';
-  document.getElementById('chk-all').indeterminate =
-    n > 0 && n < document.querySelectorAll('.row-chk').length;
 }
 
 async function bulkApprove() {
