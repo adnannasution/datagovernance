@@ -481,9 +481,13 @@ Property penting per node (gunakan nama ini di WHERE/RETURN):
 - CriticalEquipment: tag_number, ru, criticality
 - Document: doc_id, judul, tipe, ru
 
-PENTING: Jangan pakai property yang tidak ada di daftar atas (misal jangan pakai "condition", "kondisi", "state").
-Untuk kondisi buruk ICU gunakan: icu.icu_status IS NOT NULL
-Untuk bad actor aktif gunakan: ba.status IS NOT NULL
+PENTING:
+- Jangan pakai property yang tidak ada di daftar atas (misal jangan pakai "condition", "kondisi", "state")
+- JANGAN filter WHERE berdasarkan nilai spesifik seperti "Buruk", "Active", "Critical" karena nilai di database tidak diketahui pasti
+- Gunakan IS NOT NULL untuk memastikan data ada, biarkan LLM analisis nilainya
+- Contoh BENAR: WHERE ba.status IS NOT NULL
+- Contoh SALAH: WHERE ba.status = "Active"
+- Untuk pertanyaan "kondisi buruk", kembalikan semua data dengan property status/kondisi lalu LLM akan filter dari hasilnya
 
 Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20."""
 
