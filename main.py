@@ -454,11 +454,28 @@ from neo4j_sync import get_neo4j_stats, full_sync, ensure_constraints, test_conn
 
 @app.get("/knowledge-graph", response_class=HTMLResponse)
 async def page_knowledge_graph(request: Request):
-    from neo4j_sync import TABLE_NEO4J_CONFIG
+    from neo4j_sync import TABLE_NEO4J_CONFIG, get_coverage_stats
     stats = get_neo4j_stats()
+    try:
+        coverage = get_coverage_stats()
+        coverage_tables = {r["table"]: r for r in coverage.get("tables", [])}
+    except Exception:
+        coverage_tables = {}
+    # Build sync status per table for graph viz
+    table_sync_status = []
+    for tname, cfg in TABLE_NEO4J_CONFIG.items():
+        ct = coverage_tables.get(tname, {})
+        table_sync_status.append({
+            "table": tname,
+            "label": cfg["label"],
+            "rel": cfg["rel"],
+            "connected": ct.get("connected", 0),
+            "synced": ct.get("connected", 0) > 0,
+        })
     return templates.TemplateResponse(request, "knowledge_graph.html", {
         "stats": stats,
         "neo4j_tables": sorted(TABLE_NEO4J_CONFIG.keys()),
+        "table_sync_status": table_sync_status,
         "title": "Knowledge Graph"
     })
 
