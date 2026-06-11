@@ -265,6 +265,26 @@ def get_neo4j_stats() -> dict:
         return {"connected": False, "error": str(e)}
 
 
+def _load_tag_mapping(conn, table_name: str) -> dict:
+    """
+    Load approved tag_mapping entries for a given source_table.
+    Returns dict {tag_variant: tag_canonical}.
+    Falls back to empty dict if tag_mapping table doesn't exist yet.
+    """
+    try:
+        rows = conn.execute(
+            """
+            SELECT tag_variant, tag_canonical
+            FROM tag_mapping
+            WHERE source_table = %s AND status = 'approved'
+            """,
+            (table_name,),
+        ).fetchall()
+        return {r["tag_variant"]: r["tag_canonical"] for r in rows}
+    except Exception:
+        return {}
+
+
 def sync_table(table_name: str, tag_col: str, neo4j_label: str, rel_type: str, batch_size: int = 500):
     """Sync a PostgreSQL table to Neo4j. Returns dict with nodes_created and rels_created."""
     from db_equipment import get_conn
@@ -278,6 +298,9 @@ def sync_table(table_name: str, tag_col: str, neo4j_label: str, rel_type: str, b
 
     try:
         with get_conn() as conn:
+            # Load tag mapping for this table (variant -> canonical)
+            tag_mapping = _load_tag_mapping(conn, table_name)
+
             # Get total count
             count_row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table_name}").fetchone()
             total = count_row["cnt"] if count_row else 0
@@ -301,6 +324,12 @@ def sync_table(table_name: str, tag_col: str, neo4j_label: str, rel_type: str, b
                             val = str(val)
                         row_dict[col] = val
                     row_dict['_row_index'] = offset + i
+
+                    # Resolve tag via mapping; fall back to direct value for backward compatibility
+                    raw_tag = row_dict.get(tag_col)
+                    if raw_tag is not None:
+                        row_dict[tag_col] = tag_mapping.get(raw_tag, raw_tag)
+
                     batch.append(row_dict)
 
                 # Build cypher - label must be interpolated (comes from our config, not user input)

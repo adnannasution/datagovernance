@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block content %}
+
+{# ── Stats bar ─────────────────────────────────────────────────── #}
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.by_status.get('pending', 0) }}</div>
+    <div class="stat-label">Pending Review</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.by_status.get('approved', 0) }}</div>
+    <div class="stat-label">Approved</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.by_status.get('rejected', 0) }}</div>
+    <div class="stat-label">Rejected</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ (stats.by_status.get('pending',0) + stats.by_status.get('approved',0) + stats.by_status.get('rejected',0)) }}</div>
+    <div class="stat-label">Total Mappings</div>
+  </div>
+</div>
+
+{# ── Generate kandidat ─────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:1.25rem">
+  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+    <button id="btn-generate" class="btn btn-primary" onclick="generateKandidats()">
+      ⚙ Generate Kandidat
+    </button>
+    <span id="generate-status" style="font-size:.85rem;color:var(--text-muted)"></span>
+  </div>
+  <div id="generate-progress" style="display:none;margin-top:.75rem">
+    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+      <div id="progress-bar" style="height:100%;width:0%;background:var(--accent);transition:width .4s"></div>
+    </div>
+  </div>
+</div>
+
+{# ── Filter bar ────────────────────────────────────────────────── #}
+<form method="get" class="filter-bar" style="margin-bottom:1rem">
+  <select name="ru">
+    <option value="">Semua RU</option>
+    {% for r in ru_list %}
+    <option value="{{ r }}" {% if filters.ru == r %}selected{% endif %}>{{ r }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="source_table">
+    <option value="">Semua Tabel</option>
+    {% for t in table_list %}
+    <option value="{{ t }}" {% if filters.source_table == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="status">
+    <option value="pending"  {% if filters.status == 'pending'  %}selected{% endif %}>Pending</option>
+    <option value="approved" {% if filters.status == 'approved' %}selected{% endif %}>Approved</option>
+    <option value="rejected" {% if filters.status == 'rejected' %}selected{% endif %}>Rejected</option>
+    <option value=""         {% if filters.status == ''         %}selected{% endif %}>Semua Status</option>
+  </select>
+
+  <button type="submit" class="btn btn-primary">Filter</button>
+  <a href="/tag-mapping" class="btn btn-secondary">Reset</a>
+</form>
+
+{# ── Bulk actions bar ──────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+  <label style="font-size:.85rem;color:var(--text-muted)">
+    <input type="checkbox" id="chk-all" onchange="toggleAll(this)"/> Pilih Semua
+  </label>
+  <button class="btn btn-primary" onclick="bulkApprove()" style="font-size:.8rem;padding:.35rem .9rem">
+    ✓ Approve Pilihan
+  </button>
+  <span id="bulk-count" style="font-size:.8rem;color:var(--text-muted)">0 dipilih</span>
+</div>
+
+{# ── Data table ────────────────────────────────────────────────── #}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:36px"></th>
+        <th>No</th>
+        <th>Tag Canonical (SAP)</th>
+        <th>Deskripsi Equipment</th>
+        <th>Tag Variant</th>
+        <th>Source Table</th>
+        <th>Confidence</th>
+        <th>Method</th>
+        <th>Status</th>
+        <th style="width:100px">Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in mappings %}
+      <tr id="row-{{ row.id }}">
+        <td onclick="event.stopPropagation()">
+          <input type="checkbox" class="row-chk" value="{{ row.id }}" onchange="updateBulkCount()"/>
+        </td>
+        <td>{{ offset + loop.index }}</td>
+        <td><code style="font-size:.82rem">{{ row.tag_canonical }}</code></td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="{{ row.equipment_description or '' }}">
+          {{ row.equipment_description or '—' }}
+        </td>
+        <td><code style="font-size:.82rem">{{ row.tag_variant }}</code></td>
+        <td><span class="badge badge-tipe" style="font-size:.75rem">{{ row.source_table }}</span></td>
+        <td>
+          {% set conf = row.confidence | float %}
+          {% if conf >= 0.95 %}
+            <span class="badge" style="background:#16a34a;color:#fff">{{ '%.3f'|format(conf) }}</span>
+          {% elif conf >= 0.85 %}
+            <span class="badge" style="background:#ca8a04;color:#fff">{{ '%.3f'|format(conf) }}</span>
+          {% else %}
+            <span class="badge" style="background:#dc2626;color:#fff">{{ '%.3f'|format(conf) }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.match_method == 'exact' %}
+            <span class="badge" style="background:#2563eb;color:#fff">exact</span>
+          {% elif row.match_method == 'fuzzy_token' %}
+            <span class="badge" style="background:#16a34a;color:#fff">token</span>
+          {% else %}
+            <span class="badge" style="background:#ca8a04;color:#fff">levenshtein</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.status == 'approved' %}
+            <span class="badge badge-ready">approved</span>
+          {% elif row.status == 'pending' %}
+            <span class="badge badge-processing">pending</span>
+          {% else %}
+            <span class="badge badge-error">rejected</span>
+          {% endif %}
+        </td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          {% if row.status == 'pending' %}
+          <button class="btn-icon" style="color:#16a34a" title="Approve"
+                  onclick="singleAction({{ row.id }}, 'approve')">✓</button>
+          <button class="btn-icon danger" title="Reject"
+                  onclick="singleAction({{ row.id }}, 'reject')">✗</button>
+          {% elif row.status == 'approved' %}
+          <button class="btn-icon danger" title="Reject"
+                  onclick="singleAction({{ row.id }}, 'reject')">✗</button>
+          {% else %}
+          <button class="btn-icon" style="color:#16a34a" title="Approve"
+                  onclick="singleAction({{ row.id }}, 'approve')">✓</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="empty-text">Tidak ada data ditemukan</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Pagination ────────────────────────────────────────────────── #}
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&ru={{ filters.ru }}&source_table={{ filters.source_table }}&status={{ filters.status }}"
+     class="btn btn-secondary">← Prev</a>
+  {% endif %}
+  <span class="page-info">
+    Halaman {{ page }} dari {{ total_pages }} ({{ total }} mappings)
+  </span>
+  {% if page < total_pages %}
+  <a href="?page={{ page + 1 }}&ru={{ filters.ru }}&source_table={{ filters.source_table }}&status={{ filters.status }}"
+     class="btn btn-secondary">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="pagination">
+  <span class="page-info">{{ total }} mappings</span>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Generate kandidat ──────────────────────────────────────────────
+async function generateKandidats() {
+  const btn = document.getElementById('btn-generate');
+  const status = document.getElementById('generate-status');
+  const progress = document.getElementById('generate-progress');
+  const bar = document.getElementById('progress-bar');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Berjalan...';
+  status.textContent = 'Memulai generate kandidat...';
+  progress.style.display = 'block';
+  bar.style.width = '10%';
+
+  try {
+    const res = await fetch('/api/tag-mapping/generate', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    status.textContent = 'Generate berjalan di background. Refresh halaman setelah beberapa menit.';
+    bar.style.width = '30%';
+
+    // Poll status
+    const poll = setInterval(async () => {
+      try {
+        const sr = await fetch('/api/tag-mapping/status');
+        const sd = await sr.json();
+        if (!sd.running) {
+          clearInterval(poll);
+          bar.style.width = '100%';
+          btn.disabled = false;
+          btn.textContent = '⚙ Generate Kandidat';
+          const res = sd.last_result;
+          if (res) {
+            const total = Object.values(res).reduce((s, t) => s + (t.total || 0), 0);
+            status.textContent = `Selesai — ${total} tag diproses. Reload untuk melihat hasil.`;
+          } else {
+            status.textContent = 'Selesai.';
+          }
+        }
+      } catch(e) { /* ignore poll errors */ }
+    }, 3000);
+
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = '⚙ Generate Kandidat';
+  }
+}
+
+// ── Single approve/reject ──────────────────────────────────────────
+async function singleAction(id, action) {
+  const res = await fetch(`/api/tag-mapping/${id}/${action}`, { method: 'POST' });
+  if (res.ok) {
+    const row = document.getElementById('row-' + id);
+    if (row) row.style.opacity = '0.4';
+    setTimeout(() => location.reload(), 600);
+  } else {
+    alert('Gagal: ' + (await res.text()));
+  }
+}
+
+// ── Bulk select ────────────────────────────────────────────────────
+function toggleAll(masterChk) {
+  document.querySelectorAll('.row-chk').forEach(c => c.checked = masterChk.checked);
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const n = document.querySelectorAll('.row-chk:checked').length;
+  document.getElementById('bulk-count').textContent = n + ' dipilih';
+  document.getElementById('chk-all').indeterminate =
+    n > 0 && n < document.querySelectorAll('.row-chk').length;
+}
+
+async function bulkApprove() {
+  const ids = Array.from(document.querySelectorAll('.row-chk:checked')).map(c => parseInt(c.value));
+  if (!ids.length) { alert('Pilih minimal satu mapping.'); return; }
+  if (!confirm(`Approve ${ids.length} mapping?`)) return;
+
+  const res = await fetch('/api/tag-mapping/bulk-approve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, validated_by: 'user' })
+  });
+  if (res.ok) {
+    const d = await res.json();
+    alert(`${d.approved} mapping berhasil di-approve.`);
+    location.reload();
+  } else {
+    alert('Gagal bulk approve: ' + (await res.text()));
+  }
+}
+</script>
+{% endblock %}
