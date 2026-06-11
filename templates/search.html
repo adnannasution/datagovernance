@@ -1,27 +1,40 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="search-page">
-  <div class="search-box-wrap">
-    <div class="search-main">
-      <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+
+  <div class="search-hero">
+    <h1 class="search-hero-title">Smart Search</h1>
+    <p class="search-hero-sub">Cari dokumen teknik menggunakan AI semantic search</p>
+
+    <div class="search-bar-wrap">
+      <svg class="search-bar-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="query" class="search-main-input"
              placeholder="Tanya apa saja... contoh: prosedur overhaul pompa sentrifugal"/>
-      <button class="btn btn-primary" id="search-btn" onclick="doSearch()">Cari</button>
+      <button class="search-bar-btn" id="search-btn" onclick="doSearch()">Cari</button>
     </div>
-    <div class="search-filters">
-      <select id="f-ru">
-        <option value="">Semua RU</option>
-        {% for r in ru_list %}
-        <option value="{{ r }}">{{ r }}</option>
-        {% endfor %}
-      </select>
-      <select id="f-tipe">
-        <option value="">Semua Tipe</option>
-        {% for t in tipe_list %}
-        <option value="{{ t }}">{{ t }}</option>
-        {% endfor %}
-      </select>
-      <input type="text" id="f-tag" placeholder="Filter tag number..." style="width:180px"/>
+
+    <div class="search-filters-row">
+      <div class="filter-pill-wrap">
+        <select id="f-ru">
+          <option value="">Semua RU</option>
+          {% for r in ru_list %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+        <svg class="filter-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="filter-pill-wrap">
+        <select id="f-tipe">
+          <option value="">Semua Tipe</option>
+          {% for t in tipe_list %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+        <svg class="filter-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="filter-pill-wrap">
+        <input type="text" id="f-tag" placeholder="Filter tag number..."/>
+      </div>
     </div>
   </div>
 
@@ -68,7 +81,14 @@ async function doSearch() {
   status.classList.remove('hidden');
   status.textContent = 'Mengambil embedding dan mencari dokumen relevan...';
 
-  document.getElementById('results-container').innerHTML = '';
+  // Show skeleton loading cards
+  document.getElementById('results-container').innerHTML = [1,2,3].map(() => `
+    <div class="skeleton-card">
+      <div class="skeleton-line w-3-4"></div>
+      <div class="skeleton-line w-full h-3"></div>
+      <div class="skeleton-line w-full h-3"></div>
+      <div class="skeleton-line w-1-2 h-3"></div>
+    </div>`).join('');
 
   try {
     const res = await fetch('/api/search', {
@@ -90,8 +110,12 @@ async function doSearch() {
     status.textContent = `${data.total} hasil ditemukan untuk "${data.query}"`;
 
     if (data.results.length === 0) {
-      document.getElementById('results-container').innerHTML =
-        '<div class="empty-search">Tidak ada hasil yang relevan. Coba ubah kata kunci atau turunkan threshold.</div>';
+      document.getElementById('results-container').innerHTML = `
+        <div class="empty-search">
+          <svg class="empty-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          <div class="empty-search-title">Tidak ada hasil ditemukan</div>
+          <div class="empty-search-desc">Coba ubah kata kunci atau pilih filter yang berbeda.</div>
+        </div>`;
       return;
     }
 
@@ -103,17 +127,22 @@ async function doSearch() {
       const locLabel = r.slide_title ? `Slide ${r.slide_number}: ${r.slide_title}` : loc;
       return `
       <div class="result-card">
-        <div class="result-meta">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
-          ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
-          <span class="badge badge-tipe">${r.tipe_dokumen}</span>
-          ${locLabel ? `<span class="result-loc">${locLabel}</span>` : ''}
-        </div>
-        <div class="result-content">${highlight(r.content, query)}</div>
-        <div class="result-score-row">
-          <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
-          <span class="score-label">${score}% relevan</span>
+        <div class="result-card-accent"></div>
+        <div class="result-card-body">
+          <div class="result-meta">
+            <div class="result-meta-icon">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
+            ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
+            <span class="badge badge-tipe">${r.tipe_dokumen}</span>
+            ${locLabel ? `<span class="result-loc">${locLabel}</span>` : ''}
+          </div>
+          <div class="result-content">${highlight(r.content, query)}</div>
+          <div class="result-footer">
+            <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
+            <span class="score-label">${score}% relevan</span>
+          </div>
         </div>
       </div>`;
     }).join('');
