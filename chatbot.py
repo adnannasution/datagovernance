@@ -278,13 +278,109 @@ JOIN doc_tag_links t ON d.id = t.doc_id
 WHERE t.tag_number = 'XX-XXXX'
 LIMIT 10
 
+=== PEMETAAN ISTILAH BAHASA MANUSIA → KOLOM DATABASE ===
+
+Jika user menyebut kondisi/status tanpa menyebut nama kolom/tabel,
+petakan ke kolom yang relevan dan gunakan ILIKE '%nilai%':
+
+"running" / "beroperasi" / "jalan"
+  → boc.status, power_stream.status_operation,
+    readiness_jetty.status_operation, readiness_tank.status_operational,
+    readiness_spm.status_operation, critical_eqp_prim_sec.traffic_corrective
+
+"standby" / "siaga"
+  → boc.status, boc.hasil (ILIKE '%N+1%' atau '%N+2%')
+
+"shutdown" / "mati" / "tidak beroperasi" / "off"
+  → boc.status, power_stream.status_operation,
+    readiness_jetty.status_operation
+
+"kritis" / "critical"
+  → master_data_equipment.criticality (A atau B),
+    critical_eqp_prim_sec (tabel ini = equipment kritis)
+
+"bad actor"
+  → tabel bad_actor_monitoring
+
+"ICU" / "integrity concern"
+  → icu_monitoring.icu_status ILIKE '%ICU%'
+
+"selesai" / "closed" / "complete"
+  → bad_actor_monitoring.status, icu_monitoring.icu_status,
+    irkap_program.status_prognosa, irkap_actual.status_step,
+    sap_work_orders.system_status
+
+"belum selesai" / "open" / "in progress" / "ongoing"
+  → bad_actor_monitoring.status, icu_monitoring.icu_status,
+    irkap_program.status_prognosa, irkap_actual.status_step,
+    sap_work_orders.system_status
+
+"expired" / "kadaluarsa" / "habis masa berlaku"
+  → atg_monitoring.date_expired_atg < CURRENT_DATE,
+    metering_monitoring.date_expired_metering < CURRENT_DATE,
+    readiness_jetty.expired_tuks < CURRENT_DATE,
+    readiness_spm.expired_laik_operasi < CURRENT_DATE
+
+"rusak" / "masalah" / "bermasalah"
+  → bad_actor_monitoring (ada entri), icu_monitoring (ada entri),
+    critical_eqp_prim_sec.highlight_issue IS NOT NULL
+
+"tanpa standby" / "single" / "tidak ada cadangan"
+  → boc.hasil = 'N+0' ATAU boc.hasil = 'Single'
+
+"redundan" / "ada cadangan" / "ada standby"
+  → boc.hasil ILIKE '%N+1%' ATAU boc.hasil ILIKE '%N+2%'
+
+"program kerja" / "rkap" / "anggaran"
+  → irkap_program, irkap_actual
+
+"inspeksi" / "inspection"
+  → inspection_plan, pipeline_inspection
+
+"readiness" / "kesiapan" / "laik operasi"
+  → readiness_jetty, readiness_tank, readiness_spm
+
+"workplan" / "rencana kerja" / "action plan"
+  → workplan_jetty, workplan_tank, spm_workplan
+
+"notifikasi" / "SAP notif"
+  → sap_notifications
+
+"work order" / "WO" / "pekerjaan"
+  → sap_work_orders
+
+"zero clamp" / "clamp sementara"
+  → zero_clamp — cari yang tanggal_dilepas IS NULL untuk yang masih terpasang
+
+"pipeline" / "pipa"
+  → pipeline_inspection
+
+"tangki" / "tank"
+  → atg_monitoring, readiness_tank, workplan_tank
+
+"jetty" / "dermaga"
+  → readiness_jetty, workplan_jetty
+
+"SPM" / "buoy"
+  → readiness_spm, spm_workplan
+
+"metering" / "meter"
+  → metering_monitoring
+
+"ATG" / "automatic tank gauge"
+  → atg_monitoring
+
+"dokumen" / "file" / "laporan" / "SOP"
+  → doc_registry JOIN doc_tag_links
+
 === ATURAN PENTING ===
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
 - LIMIT maksimal 50
-- Gunakan ILIKE untuk pencarian teks (case-insensitive)
-- Filter RU: gunakan kolom refinery_unit ATAU ru ATAU maintenance_plant sesuai tabel
+- SELALU gunakan ILIKE '%nilai%' untuk pencarian nilai teks — jangan exact match
+- Filter RU: coba kolom refinery_unit, ru, maintenance_plant (tergantung tabel)
 - JOIN selalu lewat kolom tag sesuai tabel (lihat daftar TAG di atas)
-- Jangan asumsi nilai kolom — gunakan IS NOT NULL atau ILIKE '%keyword%'
+- Jika istilah ambigu, cari di semua kolom status yang relevan sekaligus dengan OR
+- Jangan tanya nama tabel/kolom ke user — petakan sendiri dari konteks
 """
 
 NEO4J_SCHEMA_FALLBACK = """
@@ -449,12 +545,41 @@ MATCH (e:Equipment)-[:HAS_ZERO_CLAMP]->(zc:ZeroClamp)
 WHERE zc.tanggal_dilepas IS NULL
 RETURN e.tag_number, zc.area, zc.type_damage, zc.tanggal_dipasang, zc.status LIMIT 20
 
+=== PEMETAAN ISTILAH BAHASA MANUSIA → NODE/PROPERTY GRAPH ===
+
+Jika user menyebut kondisi tanpa tahu nama property/node:
+
+"running" / "beroperasi"        → BOC.status, PowerStream.status_operation CONTAINS 'running' (case-insensitive)
+"standby"                       → BOC.hasil CONTAINS 'N+1' atau 'N+2'
+"tanpa standby" / "kritis sekali" → BOC.hasil = 'N+0'
+"kritis"                        → Equipment.criticality = 'A' atau 'B'
+"bad actor"                     → node BadActor (Equipment HAS_BAD_ACTOR)
+"ICU" / "integrity concern"     → node ICUMonitoring (Equipment HAS_ICU)
+"selesai" / "closed"            → status/status_prognosa/status_step CONTAINS 'close' atau 'selesai'
+"belum selesai" / "open"        → status property IS NOT NULL (biarkan LLM interpretasi)
+"expired"                       → property date_expired < date('today')
+"program kerja" / "rkap"        → node IRKAPProgram (Equipment HAS_IRKAP_PROGRAM)
+"inspeksi"                      → node InspectionPlan atau PipelineInspection
+"readiness" / "laik operasi"    → node ReadinessJetty/ReadinessTank/ReadinessSPM
+"workplan" / "rencana"          → node WorkplanJetty/WorkplanTank/WorkplanSPM
+"notifikasi SAP"                → node SAPNotification
+"work order"                    → node SAPWorkOrder
+"zero clamp"                    → node ZeroClamp (yang tanggal_dilepas IS NULL = masih terpasang)
+"pipeline" / "pipa"             → node PipelineInspection
+"metering"                      → node MeteringMonitor
+"ATG" / "tangki"                → node ATGMonitoring atau ReadinessTank
+"dokumen"                       → node Document (Document TERKAIT_DENGAN Equipment)
+
+Untuk nilai ambigu: gunakan toLower() dan CONTAINS, contoh:
+  WHERE toLower(b.status) CONTAINS 'running'
+  WHERE toLower(icu.icu_status) CONTAINS 'icu'
+
 === ATURAN PENTING ===
 - SELALU gunakan e.tag_number untuk Equipment (BUKAN e.equipment)
 - Arah relasi SELALU (Equipment)-[:REL]->(Node), bukan sebaliknya
 - Untuk Document: (Document)-[:TERKAIT_DENGAN]->(Equipment)
 - Untuk domain relation: (BadActor)-[:HAS_IRKAP]->(IRKAPProgram) dan (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
-- Jangan filter nilai spesifik kecuali sudah pasti (gunakan IS NOT NULL lebih aman)
+- Gunakan toLower() + CONTAINS untuk filter nilai teks — jangan exact match kecuali criticality
 - Selalu tambahkan LIMIT
 """
 
