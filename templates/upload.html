@@ -1,78 +1,131 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="upload-container">
-  <div id="drop-zone" class="drop-zone">
-    <svg viewBox="0 0 24 24" class="drop-icon"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <div class="drop-title">Drag & drop file di sini</div>
-    <div class="drop-sub">PDF, Word, Excel, PowerPoint · Maks 50MB</div>
-    <label class="btn mt-sm">
-      Pilih File
-      <input type="file" id="file-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt" hidden/>
-    </label>
-  </div>
+<div class="upload-page">
+  <div class="upload-card">
+    <div class="upload-two-col">
 
-  <div id="file-info" class="file-info hidden">
-    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    <span id="file-name-display"></span>
-    <button type="button" class="btn-icon" onclick="clearFile()">✕</button>
-  </div>
+      <!-- LEFT: Drop zone + file info -->
+      <div class="upload-left">
+        <div class="upload-left-label">File Dokumen</div>
 
-  <form id="upload-form" class="upload-form">
-    <div class="form-grid">
-      <div class="form-col">
-        <div class="form-group">
-          <label>Judul Dokumen <span class="required">*</span></label>
-          <input type="text" name="judul" id="judul" placeholder="Contoh: Inspection Report Pompa 4B-P-001" required/>
-        </div>
-        <div class="form-group">
-          <label>Tipe Dokumen <span class="required">*</span></label>
-          <select name="tipe_dokumen" required>
-            <option value="">— Pilih tipe —</option>
-            {% for t in tipe_list %}
-            <option value="{{ t }}">{{ t }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Refinery Unit</label>
-          <select name="ru">
-            <option value="">— Pilih RU —</option>
-            {% for r in ru_list %}
-            <option value="{{ r }}">{{ r }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="form-col">
-        <div class="form-group">
-          <label>Nomor Dokumen</label>
-          <input type="text" name="nomor_dokumen" placeholder="Opsional · contoh: DOC-RU4-2025-001"/>
-        </div>
-        <div class="form-group">
-          <label>Tag Number Terkait</label>
-          <div class="tag-input-wrap">
-            <input type="text" id="tag-input" placeholder="Ketik tag lalu Enter · contoh: 4B-P-001"/>
+        <div id="drop-zone" class="drop-zone-v2">
+          <div class="drop-zone-inner">
+            <div class="drop-icon-wrap">
+              <svg viewBox="0 0 24 24" class="drop-icon-v2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="drop-title-v2">Drag &amp; drop file di sini</div>
+            <div class="drop-sub-v2">atau klik untuk memilih file</div>
+            <label class="btn btn-outline-upload mt-sm">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Pilih File
+              <input type="file" id="file-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt" hidden/>
+            </label>
           </div>
-          <div id="tag-pills" class="tag-pills"></div>
-          <input type="hidden" name="tag_numbers" id="tag-numbers-hidden"/>
         </div>
-        <div class="form-group">
-          <label>Deskripsi</label>
-          <textarea name="deskripsi" rows="4" placeholder="Ringkasan singkat isi dokumen..."></textarea>
+
+        <div id="file-info" class="file-info-v2 hidden">
+          <div class="file-info-icon">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="file-info-body">
+            <div class="file-info-name" id="file-name-display"></div>
+            <div class="file-info-sub">Siap diupload</div>
+          </div>
+          <button type="button" class="btn-icon danger" onclick="clearFile()">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
+
+        <!-- Tips -->
+        <div class="upload-tips">
+          <div class="tips-title">Format yang didukung</div>
+          <div class="tips-badges">
+            <span class="file-badge pdf">PDF</span>
+            <span class="file-badge word">DOCX</span>
+            <span class="file-badge excel">XLSX</span>
+            <span class="file-badge ppt">PPTX</span>
+            <span class="file-badge-muted">Maks. 50MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Form fields -->
+      <div class="upload-right">
+        <form id="upload-form" class="upload-form-v2">
+          <div class="form-section-label">Informasi Dokumen</div>
+
+          <div class="form-group">
+            <label>Judul Dokumen <span class="required">*</span></label>
+            <input type="text" name="judul" id="judul" placeholder="Contoh: Inspection Report Pompa 4B-P-001" required/>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Tipe Dokumen <span class="required">*</span></label>
+              <div class="select-wrap">
+                <select name="tipe_dokumen" required>
+                  <option value="">— Pilih tipe —</option>
+                  {% for t in tipe_list %}
+                  <option value="{{ t }}">{{ t }}</option>
+                  {% endfor %}
+                </select>
+                <svg class="select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Refinery Unit</label>
+              <div class="select-wrap">
+                <select name="ru">
+                  <option value="">— Pilih RU —</option>
+                  {% for r in ru_list %}
+                  <option value="{{ r }}">{{ r }}</option>
+                  {% endfor %}
+                </select>
+                <svg class="select-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Nomor Dokumen</label>
+            <input type="text" name="nomor_dokumen" placeholder="Opsional · contoh: DOC-RU4-2025-001"/>
+          </div>
+
+          <div class="form-section-label" style="margin-top:4px">Tag &amp; Deskripsi</div>
+
+          <div class="form-group">
+            <label>Tag Number Terkait</label>
+            <div class="tag-input-wrap-v2">
+              <svg viewBox="0 0 24 24" class="tag-input-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              <input type="text" id="tag-input" placeholder="Ketik tag lalu Enter · contoh: 4B-P-001"/>
+            </div>
+            <div id="tag-pills" class="tag-pills-v2"></div>
+            <input type="hidden" name="tag_numbers" id="tag-numbers-hidden"/>
+          </div>
+
+          <div class="form-group">
+            <label>Deskripsi</label>
+            <textarea name="deskripsi" rows="3" placeholder="Ringkasan singkat isi dokumen..."></textarea>
+          </div>
+
+          <button type="submit" class="btn-upload-submit" id="submit-btn">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload &amp; Proses Dokumen
+          </button>
+          <a href="/library" class="btn-upload-cancel">Batal</a>
+        </form>
       </div>
     </div>
 
-    <div class="form-actions">
-      <a href="/library" class="btn btn-secondary">Batal</a>
-      <button type="submit" class="btn btn-primary" id="submit-btn">Upload & Proses</button>
+    <!-- Progress (spans full width) -->
+    <div id="progress-box" class="progress-box-v2 hidden">
+      <div class="progress-header">
+        <svg viewBox="0 0 24 24" class="progress-icon"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="progress-title">Mengupload dan memproses dokumen...</div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-status" id="progress-status">Mengupload file...</div>
     </div>
-  </form>
-
-  <div id="progress-box" class="progress-box hidden">
-    <div class="progress-title">Mengupload dan memproses dokumen...</div>
-    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-    <div class="progress-status" id="progress-status">Mengupload file...</div>
   </div>
 </div>
 {% endblock %}
@@ -131,7 +184,7 @@ document.getElementById('tag-input').addEventListener('keydown', function(e) {
 function renderTags() {
   const container = document.getElementById('tag-pills');
   container.innerHTML = tagList.map(t =>
-    `<span class="tag-pill">${t} <button type="button" onclick="removeTag('${t}')">×</button></span>`
+    `<span class="tag-chip">${t} <button type="button" onclick="removeTag('${t}')">×</button></span>`
   ).join('');
   document.getElementById('tag-numbers-hidden').value = tagList.join(',');
 }
