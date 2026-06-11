@@ -624,6 +624,10 @@ async def page_tag_mapping(
     )
     stats = _db_tm.get_mapping_stats()
     ru_list = _db_tm.get_ru_list()
+    # All tables from TABLE_CATALOG for generate dropdown (exclude master + doc)
+    skip = {"master_data_equipment", "doc_registry"}
+    all_tables = sorted([e["table"] for e in TABLE_CATALOG if e["table"] not in skip and e.get("tag_col")])
+    # Tables already in tag_mapping for filter dropdown
     table_list = _db_tm.get_source_table_list()
     return templates.TemplateResponse(request, "tag_mapping.html", {
         "groups": groups,
@@ -633,6 +637,7 @@ async def page_tag_mapping(
         "stats": stats,
         "ru_list": ru_list,
         "table_list": table_list,
+        "all_tables": all_tables,
         "filters": {"ru": ru, "source_table": source_table, "status": status},
         "title": "Tag Mapping",
     })
