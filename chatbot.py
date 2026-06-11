@@ -162,11 +162,50 @@ def detect_intent(message: str, history: list) -> str:
     """
     Deteksi intent: 'rag', 'sql', 'graph', 'hybrid', 'general'
     """
-    # If an equipment tag is detected, bias towards graph or hybrid
-    tag_hint = ""
-    if extract_tag_from_message(message):
-        tag_hint = "\nCATATAN: Pesan mengandung tag equipment. Pertimbangkan 'graph' atau 'hybrid' jika pertanyaan tentang data/relasi equipment tersebut.\n"
+    msg_lower = message.lower()
 
+    # Domain keywords per tabel — kalau menyebut 2+ domain → langsung graph
+    DOMAIN_KEYWORDS = [
+        ["bad actor", "badactor"],
+        ["icu", "integrity"],
+        ["irkap", "program kerja"],
+        ["boc", "biaya operasi"],
+        ["atg", "tangki"],
+        ["metering"],
+        ["sap notif", "notifikasi sap"],
+        ["work order", "sap wo"],
+        ["inspection", "inspeksi"],
+        ["readiness", "kesiapan"],
+        ["workplan", "rencana kerja"],
+        ["pipeline"],
+        ["critical equipment", "equipment kritis"],
+    ]
+    domain_hits = sum(
+        1 for kws in DOMAIN_KEYWORDS if any(kw in msg_lower for kw in kws)
+    )
+    if domain_hits >= 2:
+        return "graph"
+
+    # Analytic keywords → graph
+    ANALYTIC_KEYWORDS = [
+        "korelasi", "hubungan", "lintas tabel", "analisa", "analisis",
+        "scorecard", "ranking", "prioritas", "efektivitas", "bandingkan",
+        "gap", "root cause", "paradoks", "rekomendasi", "prediksi",
+        "mendalam", "komprehensif", "sekaligus", "bersamaan"
+    ]
+    if any(kw in msg_lower for kw in ANALYTIC_KEYWORDS):
+        return "graph"
+
+    # Tag detected → graph
+    if extract_tag_from_message(message):
+        return "graph"
+
+    # Document keywords → rag
+    DOC_KEYWORDS = ["dokumen", "sop", "prosedur", "manual", "laporan", "pdf", "upload"]
+    if any(kw in msg_lower for kw in DOC_KEYWORDS):
+        return "rag"
+
+    # Fallback: let LLM decide for ambiguous cases
     history_text = "\n".join([
         f"{m['role']}: {m['content'][:100]}" for m in history[-4:]
     ]) if history else ""
@@ -179,12 +218,12 @@ def detect_intent(message: str, history: list) -> str:
                 "role": "user",
                 "content": f"""Klasifikasikan pertanyaan berikut ke salah satu intent:
 - 'rag': tanya isi dokumen, SOP, prosedur, laporan, manual
-- 'sql': tanya data angka, jumlah, status, list equipment, rekap dari database
-- 'graph': tanya relasi antar entitas, koneksi equipment-dokumen, network, data lengkap satu equipment
-- 'hybrid': butuh kombinasi dokumen DAN data database/graph
-- 'general': sapaan, pertanyaan umum, tidak spesifik
-{tag_hint}
-Konteks percakapan sebelumnya:
+- 'sql': tanya data angka, jumlah, status, list dari SATU tabel saja
+- 'graph': tanya relasi/analisis lintas tabel, kondisi equipment dari berbagai sumber
+- 'hybrid': butuh kombinasi dokumen DAN data
+- 'general': sapaan, pertanyaan umum
+
+Konteks percakapan:
 {history_text}
 
 Pertanyaan: {message}
@@ -194,10 +233,10 @@ Jawab HANYA satu kata: rag / sql / graph / hybrid / general"""
         )
         intent = resp.choices[0].message.content.strip().lower()
         if intent not in ("rag", "sql", "graph", "hybrid", "general"):
-            intent = "hybrid"
+            intent = "sql"
         return intent
     except Exception:
-        return "hybrid"
+        return "sql"
 
 # ─── RAG Handler ──────────────────────────────────────────────────────────────
 
