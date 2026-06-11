@@ -603,8 +603,10 @@ async def api_chat(request: Request):
         result = chatbot_chat(message, history=history, filters=filters)
         return result
     except Exception as e:
+        import traceback, logging
+        logging.error(f"[CHAT ERROR] {e}\n{traceback.format_exc()}")
         return JSONResponse(status_code=200, content={
-            "answer": "Maaf, terjadi kesalahan saat memproses pertanyaan. Silakan coba lagi.",
+            "answer": f"Maaf, terjadi kesalahan: {str(e)}",
             "intent": "error",
             "error": str(e),
         })
