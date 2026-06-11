@@ -466,8 +466,24 @@ MATCH (e:Equipment)-[:HAS_BAD_ACTOR]->(ba:BadActor)
 MATCH (e)-[:HAS_ICU]->(icu:ICUMonitoring)
 Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations di atas.
 
-Equipment punya property: tag_number, description, maintenance_plant, criticality
-Document punya property: doc_id, judul, tipe, ru
+Property penting per node (gunakan nama ini di WHERE/RETURN):
+- Equipment: tag_number, description, maintenance_plant, criticality
+- BadActor: tag_number, ru, status, problem, action_plan, progress, periode, no_irkap
+- ICUMonitoring: tag_no, ru, icu_status, issue, mitigation, progress, target_closed
+- IRKAPProgram: tag_number, ru, no_program_kerja, status, progress, target_date
+- IRKAPActual: tag_number, no_program, realisasi, status
+- SAPNotification: equipment, notification, notif_type, notif_date, description, order_no
+- SAPWorkOrder: order_no, equipment, order_type, description, system_status, total_plan_cost
+- BOC: equipment, ru, status, running_hours, mttr, mtbf
+- ATGMonitoring: tag_no_tangki, refinery_unit, status_atg, remark
+- MeteringMonitor: tag_number, refinery_unit, status_metering, remark
+- InspectionPlan: tag_number, ru, next_inspection_date, last_inspection_date
+- CriticalEquipment: tag_number, ru, criticality
+- Document: doc_id, judul, tipe, ru
+
+PENTING: Jangan pakai property yang tidak ada di daftar atas (misal jangan pakai "condition", "kondisi", "state").
+Untuk kondisi buruk ICU gunakan: icu.icu_status IS NOT NULL
+Untuk bad actor aktif gunakan: ba.status IS NOT NULL
 
 Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20."""
 
