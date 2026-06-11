@@ -64,6 +64,25 @@ def ensure_constraints():
 
 # ─── Single Document Sync ────────────────────────────────────────────────────
 
+def _load_doc_tag_mapping(tags: list) -> dict:
+    """Resolve doc tag variants to canonical via tag_mapping."""
+    if not tags:
+        return {}
+    try:
+        from db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute("""
+                SELECT tag_variant, tag_canonical FROM tag_mapping
+                WHERE status = 'approved'
+                  AND tag_variant = ANY(%s)
+            """, (tags,)).fetchall()
+            mapping = {r["tag_variant"]: r["tag_canonical"] for r in rows}
+            # fallback: if not in mapping, use tag itself
+            return {t: mapping.get(t, t) for t in tags}
+    except Exception:
+        return {t: t for t in tags}
+
+
 def sync_document(doc: dict, tag_links: list) -> dict:
     """
     Buat/update satu node Document dan relasi ke Equipment.
@@ -106,10 +125,14 @@ def sync_document(doc: dict, tag_links: list) -> dict:
                 })
 
                 # Buat relasi ke Equipment untuk setiap tag
+                # Resolve tags via mapping
+                tag_variants = [link["tag_number"] for link in tag_links]
+                tag_resolved = _load_doc_tag_mapping(tag_variants)
+
                 linked = 0
                 not_found = []
                 for link in tag_links:
-                    tag = link["tag_number"]
+                    tag = tag_resolved.get(link["tag_number"], link["tag_number"])
                     link_type = link.get("link_type", "manual")
 
                     result = session.run("""

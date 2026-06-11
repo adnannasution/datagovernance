@@ -192,29 +192,13 @@ async function doSearch() {
   const ru = document.getElementById('f-ru').value || '';
 
   try {
-    const [docRes, graphRes] = await Promise.all([
-      fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          ru: ru || null,
-          tipe: document.getElementById('f-tipe').value || null,
-          tag_number: document.getElementById('f-tag').value.trim() || null,
-          limit: 10,
-          threshold: 0.35
-        })
-      }),
-      fetch(`/api/search/graph?q=${encodeURIComponent(query)}&ru=${encodeURIComponent(ru)}&limit=10`)
-    ]);
+    const res = await fetch(`/api/search/all?q=${encodeURIComponent(query)}&ru=${encodeURIComponent(ru)}&limit=10`);
+    const data = await res.json();
 
-    const docData = await docRes.json();
-    const graphData = await graphRes.json();
+    if (!res.ok) throw new Error(data.detail || 'Search gagal');
 
-    if (!docRes.ok) throw new Error(docData.detail || 'Search gagal');
-
-    const docTotal = docData.total || 0;
-    const graphTotal = graphData.total || 0;
+    const docTotal = data.total_docs || 0;
+    const graphTotal = data.total_equipment || 0;
 
     status.textContent = `${docTotal} dokumen dan ${graphTotal} equipment ditemukan untuk "${query}"`;
 
@@ -223,7 +207,7 @@ async function doSearch() {
     document.getElementById('tab-graph-count').textContent = graphTotal;
 
     // Render doc results
-    if (docData.results.length === 0) {
+    if (!data.documents || data.documents.length === 0) {
       document.getElementById('results-doc').innerHTML = `
         <div class="empty-search">
           <svg class="empty-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -231,7 +215,7 @@ async function doSearch() {
           <div class="empty-search-desc">Coba ubah kata kunci atau pilih filter yang berbeda.</div>
         </div>`;
     } else {
-      document.getElementById('results-doc').innerHTML = docData.results.map((r, i) => {
+      document.getElementById('results-doc').innerHTML = data.documents.map((r, i) => {
         const score = Math.round(r.score * 100);
         const loc = r.halaman ? `Halaman ${r.halaman}` :
                     r.slide_number ? `Slide ${r.slide_number}` :
@@ -261,7 +245,7 @@ async function doSearch() {
     }
 
     // Render graph/equipment results
-    if (!graphRes.ok || !graphData.results || graphData.results.length === 0) {
+    if (!data.equipment || data.equipment.length === 0) {
       document.getElementById('results-graph').innerHTML = `
         <div class="empty-search">
           <svg class="empty-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -269,7 +253,7 @@ async function doSearch() {
           <div class="empty-search-desc">Coba ubah kata kunci pencarian.</div>
         </div>`;
     } else {
-      document.getElementById('results-graph').innerHTML = graphData.results.map(eq => {
+      document.getElementById('results-graph').innerHTML = data.equipment.map(eq => {
         const hasBadActor = (eq.bad_actor_count || 0) > 0;
         const crit = (eq.criticality || '').toLowerCase();
         let critBadge = '';
