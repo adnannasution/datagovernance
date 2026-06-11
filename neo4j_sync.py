@@ -196,30 +196,19 @@ def get_neo4j_stats() -> dict:
     try:
         with get_driver() as driver:
             with driver.session() as session:
-                # Count nodes per label
-                labels_result = session.run("""
-                    CALL db.labels() YIELD label
-                    CALL apoc.cypher.run('MATCH (n:' + label + ') RETURN count(n) as count', {})
-                    YIELD value
-                    RETURN label, value.count as count
-                    ORDER BY count DESC
-                """)
+                # Count nodes per label (tanpa APOC)
                 labels = []
-                try:
-                    labels = [{"label": r["label"], "count": r["count"]}
-                              for r in labels_result]
-                except Exception:
-                    # Fallback tanpa APOC
-                    for lbl in ["Equipment", "Document", "BOC", "ICUMonitoring",
-                                "ATGMonitoring", "MeteringMonitor", "BadActor"]:
-                        try:
-                            r = session.run(
-                                f"MATCH (n:{lbl}) RETURN count(n) as count"
-                            ).single()
-                            if r:
-                                labels.append({"label": lbl, "count": r["count"]})
-                        except Exception:
-                            pass
+                for lbl in ["Equipment", "Document", "BOC", "ICUMonitoring",
+                            "ATGMonitoring", "MeteringMonitor", "BadActor"]:
+                    try:
+                        r = session.run(
+                            f"MATCH (n:{lbl}) RETURN count(n) as count"
+                        ).single()
+                        if r and r["count"] > 0:
+                            labels.append({"label": lbl, "count": r["count"]})
+                    except Exception:
+                        pass
+                labels.sort(key=lambda x: x["count"], reverse=True)
 
                 # Count relasi Document-Equipment
                 doc_rel = session.run("""
