@@ -221,12 +221,20 @@
     </div>
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
       <div>
-        <div style="font-size:13px;margin-bottom:4px">Table Sync — sync semua tabel equipment ke Neo4j</div>
-        <div style="font-size:12px;color:var(--text3)">Sync SAP, Monitoring, Inspection, Readiness, Workplan, IRKAP</div>
+        <div style="font-size:13px;margin-bottom:4px">Table Sync — sync tabel equipment ke Neo4j</div>
+        <div style="font-size:12px;color:var(--text3)">Pilih tabel spesifik atau sync semua sekaligus</div>
       </div>
-      <button class="btn btn-secondary" id="table-sync-btn" onclick="startTableSync()" {% if not stats.connected %}disabled{% endif %}>
-        Sync Semua Tabel
-      </button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <select id="select-sync-table" style="padding:.4rem .7rem;border-radius:6px;border:1px solid var(--border);font-size:.82rem;background:var(--bg-card)">
+          <option value="">— Semua Tabel —</option>
+          {% for tname in neo4j_tables %}
+          <option value="{{ tname }}">{{ tname }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-secondary" id="table-sync-btn" onclick="startTableSync()" {% if not stats.connected %}disabled{% endif %}>
+          Sync Tabel
+        </button>
+      </div>
     </div>
   </div>
 
@@ -420,16 +428,21 @@ function buildCoverageTable(rows) {
 
 async function startTableSync() {
   const btn = document.getElementById('table-sync-btn');
+  const sourceTable = document.getElementById('select-sync-table').value || null;
   btn.disabled = true;
   btn.textContent = 'Sync berjalan...';
 
   document.getElementById('table-sync-status').classList.remove('hidden');
   document.getElementById('table-sync-result').classList.add('hidden');
   document.getElementById('table-sync-progress').style.width = '10%';
-  document.getElementById('table-sync-msg').textContent = 'Memulai sync tabel...';
+  const label = sourceTable ? `tabel '${sourceTable}'` : 'semua tabel';
+  document.getElementById('table-sync-msg').textContent = `Memulai sync ${label}...`;
 
   try {
-    const res = await fetch('/api/neo4j/sync/tables', { method: 'POST' });
+    const url = sourceTable
+      ? `/api/neo4j/sync/tables?source_table=${encodeURIComponent(sourceTable)}`
+      : '/api/neo4j/sync/tables';
+    const res = await fetch(url, { method: 'POST' });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.detail || 'Gagal memulai sync tabel');
@@ -440,6 +453,9 @@ async function startTableSync() {
       try {
         const sr = await fetch('/api/neo4j/sync/tables/status');
         const sd = await sr.json();
+        if (sd.current_table) {
+          document.getElementById('table-sync-msg').textContent = `Sedang sync: ${sd.current_table}...`;
+        }
         pct = Math.min(pct + 3, 90);
         document.getElementById('table-sync-progress').style.width = pct + '%';
 
@@ -448,8 +464,8 @@ async function startTableSync() {
           document.getElementById('table-sync-progress').style.width = '100%';
           showTableSyncResult(sd.last_result);
           btn.disabled = false;
-          btn.textContent = 'Sync Semua Tabel';
-          coverageLoaded = false; // reset so coverage reloads next visit
+          btn.textContent = 'Sync Tabel';
+          coverageLoaded = false;
         }
       } catch(e) {}
     }, 2000);
@@ -457,7 +473,7 @@ async function startTableSync() {
   } catch(err) {
     document.getElementById('table-sync-msg').textContent = 'Error: ' + err.message;
     btn.disabled = false;
-    btn.textContent = 'Sync Semua Tabel';
+    btn.textContent = 'Sync Tabel';
   }
 }
 

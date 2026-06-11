@@ -19,49 +19,132 @@ def normalize_tag(tag: str) -> str:
     return tag
 
 
-def generate_candidates(batch_size: int = 1000) -> dict:
+def _build_canonical_index(conn, batch_size: int = 1000):
+    """Build canonical tag lookup structures from master_data_equipment."""
+    norm_to_canonical = {}
+    canonical_set = set()
+    # prefix index: first 4 chars of normalized tag -> list of (norm, canon)
+    prefix_index = {}
+
+    offset = 0
+    while True:
+        rows = conn.execute(
+            "SELECT equipment FROM master_data_equipment "
+            "WHERE equipment IS NOT NULL "
+            "ORDER BY equipment "
+            "LIMIT %s OFFSET %s",
+            (batch_size, offset)
+        ).fetchall()
+        if not rows:
+            break
+        for row in rows:
+            canon = row["equipment"]
+            canonical_set.add(canon)
+            norm = normalize_tag(canon)
+            if norm not in norm_to_canonical:
+                norm_to_canonical[norm] = canon
+                prefix = norm[:4]
+                if prefix not in prefix_index:
+                    prefix_index[prefix] = []
+                prefix_index[prefix].append((norm, canon))
+        offset += batch_size
+
+    return canonical_set, norm_to_canonical, prefix_index
+
+
+def _upsert_mapping(conn, tag_canonical, variant, table_name, confidence, method, status):
+    try:
+        conn.execute("""
+            INSERT INTO tag_mapping
+                (tag_canonical, tag_variant, source_table,
+                 confidence, match_method, status)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (tag_variant, source_table) DO UPDATE
+                SET confidence   = GREATEST(tag_mapping.confidence, EXCLUDED.confidence),
+                    match_method = CASE
+                        WHEN EXCLUDED.confidence > tag_mapping.confidence
+                        THEN EXCLUDED.match_method
+                        ELSE tag_mapping.match_method
+                    END,
+                    tag_canonical = CASE
+                        WHEN EXCLUDED.confidence > tag_mapping.confidence
+                        THEN EXCLUDED.tag_canonical
+                        ELSE tag_mapping.tag_canonical
+                    END
+        """, (tag_canonical, variant, table_name, confidence, method, status))
+    except Exception:
+        pass
+
+
+def _process_variant(variant, table_name, canonical_set, norm_to_canonical, prefix_index):
+    """Resolve a single tag variant. Returns (canonical, confidence, method, status) or None."""
+    if not variant:
+        return None
+
+    # Exact match
+    if variant in canonical_set:
+        return variant, 1.0, "exact", "approved"
+
+    if table_name in SAP_TABLES:
+        return None
+
+    # Token/normalize match
+    norm_variant = normalize_tag(variant)
+    if norm_variant and norm_variant in norm_to_canonical:
+        return norm_to_canonical[norm_variant], 0.95, "fuzzy_token", "approved"
+
+    # Levenshtein - only compare against same-prefix candidates (much faster)
+    if norm_variant:
+        prefix = norm_variant[:4]
+        # Try same prefix first, then adjacent prefixes for better recall
+        candidates = prefix_index.get(prefix, [])
+        if len(candidates) < 50:
+            # Also check nearby prefixes if few candidates
+            for p in [norm_variant[:3], norm_variant[:5]]:
+                for k, v in prefix_index.items():
+                    if k.startswith(p) or p.startswith(k[:3]):
+                        candidates = candidates + v
+                        if len(candidates) > 200:
+                            break
+                if len(candidates) > 200:
+                    break
+
+        best_ratio = 0.0
+        best_canon = None
+        for norm_canon, canon in candidates:
+            ratio = difflib.SequenceMatcher(None, norm_variant, norm_canon).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_canon = canon
+
+        if best_ratio >= 0.85 and best_canon is not None:
+            return best_canon, round(best_ratio, 3), "fuzzy_levenshtein", "pending"
+
+    return None
+
+
+def generate_candidates(source_table: str = None, batch_size: int = 1000) -> dict:
     """
-    Scan all tables in TABLE_CATALOG and generate tag_mapping candidates.
+    Generate tag_mapping candidates for all tables or a specific table.
     Returns summary: {table: {total, exact, fuzzy_token, fuzzy_levenshtein, skipped}}
     """
     summary = {}
+    skip_tables = {"master_data_equipment", "doc_registry"}
 
     with get_conn() as conn:
-        # ── 1. Build canonical tag dicts ────────────────────────────────────
-        # normalized_form -> canonical tag string
-        # Process in batches to avoid loading all 215K at once
-        norm_to_canonical = {}   # normalized -> canonical
-        canonical_set = set()    # exact canonical tags
+        canonical_set, norm_to_canonical, prefix_index = _build_canonical_index(conn, batch_size)
 
-        offset = 0
-        while True:
-            rows = conn.execute(
-                "SELECT equipment FROM master_data_equipment "
-                "WHERE equipment IS NOT NULL "
-                "ORDER BY equipment "
-                "LIMIT %s OFFSET %s",
-                (batch_size, offset)
-            ).fetchall()
-            if not rows:
-                break
-            for row in rows:
-                canon = row["equipment"]
-                canonical_set.add(canon)
-                norm = normalize_tag(canon)
-                if norm not in norm_to_canonical:
-                    norm_to_canonical[norm] = canon
-            offset += batch_size
-
-        # ── 2. Iterate source tables ─────────────────────────────────────────
-        skip_tables = {"master_data_equipment", "doc_registry"}
-
+        tables_to_process = []
         for entry in TABLE_CATALOG:
-            table_name = entry["table"]
+            tname = entry["table"]
             tag_col = entry.get("tag_col")
-
-            if table_name in skip_tables or not tag_col:
+            if tname in skip_tables or not tag_col:
                 continue
+            if source_table and tname != source_table:
+                continue
+            tables_to_process.append((tname, tag_col))
 
+        for table_name, tag_col in tables_to_process:
             counts = {"total": 0, "exact": 0, "fuzzy_token": 0,
                       "fuzzy_levenshtein": 0, "skipped": 0}
 
@@ -76,86 +159,17 @@ def generate_candidates(batch_size: int = 1000) -> dict:
 
             for row in variants:
                 variant = row[tag_col]
-                if not variant:
+                counts["total"] += 1
+
+                result = _process_variant(
+                    variant, table_name, canonical_set, norm_to_canonical, prefix_index
+                )
+                if result is None:
+                    counts["skipped"] += 1
                     continue
 
-                counts["total"] += 1
-                tag_canonical = None
-                confidence = None
-                method = None
-                status = None
-
-                # ── Exact match ──────────────────────────────────────────────
-                if variant in canonical_set:
-                    tag_canonical = variant
-                    confidence = 1.0
-                    method = "exact"
-                    status = "approved"
-
-                if table_name in SAP_TABLES:
-                    # SAP tables: only exact match, skip fuzzy entirely
-                    if tag_canonical is None:
-                        counts["skipped"] += 1
-                        continue
-                else:
-                    # ── Token/normalize match ────────────────────────────────
-                    if tag_canonical is None:
-                        norm_variant = normalize_tag(variant)
-                        if norm_variant and norm_variant in norm_to_canonical:
-                            tag_canonical = norm_to_canonical[norm_variant]
-                            confidence = 0.95
-                            method = "fuzzy_token"
-                            status = "approved"
-
-                    # ── Levenshtein via SequenceMatcher ──────────────────────
-                    if tag_canonical is None:
-                        norm_variant = normalize_tag(variant)
-                        best_ratio = 0.0
-                        best_canon = None
-
-                        # Only compare against normalized keys for efficiency
-                        for norm_canon, canon in norm_to_canonical.items():
-                            ratio = difflib.SequenceMatcher(
-                                None, norm_variant, norm_canon
-                            ).ratio()
-                            if ratio > best_ratio:
-                                best_ratio = ratio
-                                best_canon = canon
-
-                        if best_ratio >= 0.85 and best_canon is not None:
-                            tag_canonical = best_canon
-                            confidence = round(best_ratio, 3)
-                            method = "fuzzy_levenshtein"
-                            status = "pending"
-
-                    if tag_canonical is None:
-                        counts["skipped"] += 1
-                        continue
-
-                # ── Upsert into tag_mapping ──────────────────────────────────
-                try:
-                    conn.execute("""
-                        INSERT INTO tag_mapping
-                            (tag_canonical, tag_variant, source_table,
-                             confidence, match_method, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (tag_variant, source_table) DO UPDATE
-                            SET confidence   = GREATEST(tag_mapping.confidence, EXCLUDED.confidence),
-                                match_method = CASE
-                                    WHEN EXCLUDED.confidence > tag_mapping.confidence
-                                    THEN EXCLUDED.match_method
-                                    ELSE tag_mapping.match_method
-                                END,
-                                tag_canonical = CASE
-                                    WHEN EXCLUDED.confidence > tag_mapping.confidence
-                                    THEN EXCLUDED.tag_canonical
-                                    ELSE tag_mapping.tag_canonical
-                                END
-                    """, (tag_canonical, variant, table_name,
-                          confidence, method, status))
-                except Exception:
-                    pass
-
+                tag_canonical, confidence, method, status = result
+                _upsert_mapping(conn, tag_canonical, variant, table_name, confidence, method, status)
                 counts[method] += 1
 
             try:

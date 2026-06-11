@@ -454,9 +454,11 @@ from neo4j_sync import get_neo4j_stats, full_sync, ensure_constraints, test_conn
 
 @app.get("/knowledge-graph", response_class=HTMLResponse)
 async def page_knowledge_graph(request: Request):
+    from neo4j_sync import TABLE_NEO4J_CONFIG
     stats = get_neo4j_stats()
     return templates.TemplateResponse(request, "knowledge_graph.html", {
         "stats": stats,
+        "neo4j_tables": sorted(TABLE_NEO4J_CONFIG.keys()),
         "title": "Knowledge Graph"
     })
 
@@ -491,15 +493,21 @@ def _run_full_sync():
 
 _table_sync_running = False
 _last_table_sync_result = None
+_table_sync_current = None
 
-def _run_table_sync():
-    global _table_sync_running, _last_table_sync_result
+def _run_table_sync(source_table: str = None):
+    global _table_sync_running, _last_table_sync_result, _table_sync_current
     _table_sync_running = True
+    _table_sync_current = source_table or "all"
     try:
         from neo4j_sync import sync_all_tables
-        _last_table_sync_result = sync_all_tables()
+        def _on_progress(tname):
+            global _table_sync_current
+            _table_sync_current = tname
+        _last_table_sync_result = sync_all_tables(source_table=source_table, progress_callback=_on_progress)
     finally:
         _table_sync_running = False
+        _table_sync_current = None
 
 @app.get("/api/neo4j/graph")
 async def api_neo4j_graph(tag: str = "", depth: int = 1):
@@ -509,16 +517,21 @@ async def api_neo4j_graph(tag: str = "", depth: int = 1):
     return get_graph_for_tag(tag, depth=depth)
 
 @app.post("/api/neo4j/sync/tables")
-async def api_sync_all_tables(background_tasks: BackgroundTasks):
-    from neo4j_sync import get_driver
+async def api_sync_all_tables(background_tasks: BackgroundTasks, source_table: str = None):
+    from neo4j_sync import get_driver, TABLE_NEO4J_CONFIG
     if get_driver() is None:
         raise HTTPException(status_code=503, detail="Neo4j tidak dapat diakses")
-    background_tasks.add_task(_run_table_sync)
-    return {"message": "Sync semua tabel dimulai di background"}
+    if source_table and source_table not in TABLE_NEO4J_CONFIG:
+        raise HTTPException(status_code=400, detail=f"Tabel '{source_table}' tidak ada di konfigurasi Neo4j")
+    if _table_sync_running:
+        return {"message": "Sync sudah berjalan", "running": True}
+    background_tasks.add_task(_run_table_sync, source_table)
+    msg = f"Sync tabel '{source_table}' dimulai" if source_table else "Sync semua tabel dimulai"
+    return {"message": msg, "running": True}
 
 @app.get("/api/neo4j/sync/tables/status")
 async def api_sync_tables_status():
-    return {"running": _table_sync_running, "last_result": _last_table_sync_result}
+    return {"running": _table_sync_running, "current_table": _table_sync_current, "last_result": _last_table_sync_result}
 
 _domain_rel_running = False
 _last_domain_rel_result = None
@@ -579,15 +592,18 @@ from tag_resolver import generate_candidates
 
 _mapping_running = False
 _last_mapping_result = None
+_mapping_current_table = None
 
 
-def _run_generate_candidates():
-    global _mapping_running, _last_mapping_result
+def _run_generate_candidates(source_table: str = None):
+    global _mapping_running, _last_mapping_result, _mapping_current_table
     _mapping_running = True
+    _mapping_current_table = source_table or "all"
     try:
-        _last_mapping_result = generate_candidates()
+        _last_mapping_result = generate_candidates(source_table=source_table)
     finally:
         _mapping_running = False
+        _mapping_current_table = None
 
 
 @app.get("/tag-mapping", response_class=HTMLResponse)
@@ -623,17 +639,22 @@ async def page_tag_mapping(
 
 
 @app.post("/api/tag-mapping/generate")
-async def api_generate_mappings(background_tasks: BackgroundTasks):
+async def api_generate_mappings(background_tasks: BackgroundTasks, source_table: str = None):
     global _mapping_running
     if _mapping_running:
-        return {"message": "Generate sudah berjalan"}
-    background_tasks.add_task(_run_generate_candidates)
-    return {"message": "Generate kandidat dimulai di background"}
+        return {"message": "Generate sudah berjalan", "running": True}
+    background_tasks.add_task(_run_generate_candidates, source_table)
+    msg = f"Generate kandidat untuk tabel '{source_table}' dimulai" if source_table else "Generate semua tabel dimulai"
+    return {"message": msg, "running": True}
 
 
 @app.get("/api/tag-mapping/status")
 async def api_mapping_status():
-    return {"running": _mapping_running, "last_result": _last_mapping_result}
+    return {
+        "running": _mapping_running,
+        "current_table": _mapping_current_table,
+        "last_result": _last_mapping_result,
+    }
 
 
 @app.post("/api/tag-mapping/{mapping_id}/approve")
