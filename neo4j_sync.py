@@ -32,7 +32,7 @@ TABLE_NEO4J_CONFIG = {
     "workplan_jetty":         {"label": "WorkplanJetty",      "rel": "HAS_WORKPLAN"},
     "workplan_tank":          {"label": "WorkplanTank",       "rel": "HAS_WORKPLAN"},
     "spm_workplan":           {"label": "WorkplanSPM",        "rel": "HAS_WORKPLAN"},
-    "irkap_program":          {"label": "IRKAPProgram",       "rel": "HAS_IRKAP"},
+    "irkap_program":          {"label": "IRKAPProgram",       "rel": "HAS_IRKAP_PROGRAM"},
     "irkap_actual":           {"label": "IRKAPActual",        "rel": "HAS_IRKAP_ACTUAL"},
 }
 
