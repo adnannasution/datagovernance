@@ -68,31 +68,85 @@ DOKUMEN:
 
 def get_equipment_context_from_graph(tag: str) -> dict:
     """Get all connected data for a tag from Neo4j."""
-    from neo4j_sync import get_driver
-    with get_driver() as driver:
-        with driver.session() as session:
-            result = session.run("""
-                MATCH (e:Equipment {tag_number: $tag})
-                OPTIONAL MATCH (e)<-[:HAS_BAD_ACTOR]-(ba:BadActor)
-                OPTIONAL MATCH (e)<-[:HAS_ICU]-(icu:ICUMonitoring)
-                OPTIONAL MATCH (e)<-[:HAS_NOTIFICATION]-(n:SAPNotification)
-                OPTIONAL MATCH (e)<-[:HAS_WORK_ORDER]-(wo:SAPWorkOrder)
-                OPTIONAL MATCH (e)<-[:HAS_BOC]-(boc:BOC)
-                OPTIONAL MATCH (e)<-[:HAS_IRKAP]-(irkap:IRKAPProgram)
-                OPTIONAL MATCH (doc:Document)-[:TERKAIT_DENGAN]->(e)
-                RETURN e,
-                    collect(DISTINCT ba)[..5] as bad_actors,
-                    collect(DISTINCT icu)[..5] as icus,
-                    collect(DISTINCT n)[..5] as notifications,
-                    collect(DISTINCT wo)[..5] as work_orders,
-                    collect(DISTINCT boc)[..3] as bocs,
-                    collect(DISTINCT irkap)[..3] as irkaps,
-                    collect(DISTINCT doc)[..5] as documents
-            """, {"tag": tag})
-            row = result.single()
-            if not row:
-                return None
-            return dict(row)
+    try:
+        from neo4j_sync import get_driver
+        with get_driver() as driver:
+            with driver.session() as session:
+                result = session.run("""
+                    MATCH (e:Equipment {tag_number: $tag})
+                    OPTIONAL MATCH (e)<-[:HAS_BAD_ACTOR]-(ba:BadActor)
+                    OPTIONAL MATCH (e)<-[:HAS_ICU]-(icu:ICUMonitoring)
+                    OPTIONAL MATCH (e)<-[:HAS_NOTIFICATION]-(n:SAPNotification)
+                    OPTIONAL MATCH (e)<-[:HAS_WORK_ORDER]-(wo:SAPWorkOrder)
+                    OPTIONAL MATCH (e)<-[:HAS_BOC]-(boc:BOC)
+                    OPTIONAL MATCH (e)<-[:HAS_IRKAP]-(irkap:IRKAPProgram)
+                    OPTIONAL MATCH (e)<-[:HAS_IRKAP_ACTUAL]-(irkap_a:IRKAPActual)
+                    OPTIONAL MATCH (e)<-[:HAS_ATG]-(atg:ATGMonitoring)
+                    OPTIONAL MATCH (e)<-[:HAS_METERING]-(meter:MeteringMonitor)
+                    OPTIONAL MATCH (e)<-[:HAS_PIPELINE_INSPECTION]-(pipe:PipelineInspection)
+                    OPTIONAL MATCH (e)<-[:HAS_INSPECTION_PLAN]-(insp:InspectionPlan)
+                    OPTIONAL MATCH (e)<-[:HAS_ZERO_CLAMP]-(zc:ZeroClamp)
+                    OPTIONAL MATCH (e)<-[:HAS_READINESS]-(ready)
+                    OPTIONAL MATCH (e)<-[:HAS_WORKPLAN]-(wp)
+                    OPTIONAL MATCH (e)<-[:IS_CRITICAL]-(crit:CriticalEquipment)
+                    OPTIONAL MATCH (e)<-[:HAS_POWER_STREAM]-(ps:PowerStream)
+                    OPTIONAL MATCH (doc:Document)-[:TERKAIT_DENGAN]->(e)
+                    RETURN e,
+                        collect(DISTINCT ba)[..5] as bad_actors,
+                        collect(DISTINCT icu)[..5] as icus,
+                        collect(DISTINCT n)[..5] as notifications,
+                        collect(DISTINCT wo)[..5] as work_orders,
+                        collect(DISTINCT boc)[..3] as bocs,
+                        collect(DISTINCT irkap)[..3] as irkaps,
+                        collect(DISTINCT irkap_a)[..3] as irkap_actuals,
+                        collect(DISTINCT atg)[..3] as atgs,
+                        collect(DISTINCT meter)[..3] as meterings,
+                        collect(DISTINCT pipe)[..3] as pipelines,
+                        collect(DISTINCT insp)[..3] as inspection_plans,
+                        collect(DISTINCT zc)[..3] as zero_clamps,
+                        collect(DISTINCT ready)[..3] as readiness,
+                        collect(DISTINCT wp)[..3] as workplans,
+                        collect(DISTINCT crit)[..2] as critical,
+                        collect(DISTINCT ps)[..2] as power_streams,
+                        collect(DISTINCT doc)[..5] as documents
+                """, {"tag": tag})
+                row = result.single()
+                if not row:
+                    return None
+                return dict(row)
+    except Exception:
+        return None
+
+
+def _format_graph_context(tag: str, ctx: dict) -> str:
+    """Format Neo4j graph context into readable text for LLM."""
+    lines = [f"Data Knowledge Graph untuk equipment {tag}:"]
+    e = dict(ctx.get("e", {})) if ctx.get("e") else {}
+    if e:
+        lines.append(f"- Deskripsi: {e.get('description', '—')}")
+        lines.append(f"- Plant/RU: {e.get('maintenance_plant', '—')}")
+        lines.append(f"- Criticality: {e.get('criticality', '—')}")
+
+    for key, label in [
+        ("bad_actors", "Bad Actor"), ("icus", "ICU Monitoring"),
+        ("notifications", "SAP Notifications"), ("work_orders", "SAP Work Orders"),
+        ("bocs", "BOC"), ("irkaps", "IRKAP Program"), ("irkap_actuals", "IRKAP Actual"),
+        ("atgs", "ATG Monitoring"), ("meterings", "Metering"),
+        ("pipelines", "Pipeline Inspection"), ("inspection_plans", "Inspection Plan"),
+        ("zero_clamps", "Zero Clamp"), ("readiness", "Readiness"),
+        ("workplans", "Workplan"), ("critical", "Critical Equipment"),
+        ("power_streams", "Power Stream"), ("documents", "Dokumen Terkait"),
+    ]:
+        items = ctx.get(key, [])
+        if items:
+            lines.append(f"\n{label} ({len(items)} record):")
+            for item in items[:3]:
+                d = dict(item)
+                # Show first 3 key-value pairs
+                kv = [f"{k}: {v}" for k, v in list(d.items())[:3] if v and k not in ('tag_number', 'equipment', 'tag_no', 'tag_no_ln', 'tag_no_tangki', 'equipment_tag_no')]
+                lines.append(f"  • {', '.join(kv)}")
+
+    return "\n".join(lines)
 
 
 def extract_tag_from_message(message: str) -> str | None:
@@ -314,33 +368,35 @@ Sertakan insight singkat jika relevan."""
 
 CYPHER_SYSTEM_PROMPT = """Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
 
-Node labels yang tersedia: Equipment, Document, BOC, ICUMonitoring, ATGMonitoring, MeteringMonitor,
+Node labels yang tersedia:
+Equipment, Document, BOC, ICUMonitoring, ATGMonitoring, MeteringMonitor,
 BadActor, SAPNotification, SAPWorkOrder, InspectionPlan, PipelineInspection, ZeroClamp, PowerStream,
 CriticalEquipment, ReadinessJetty, ReadinessTank, ReadinessSPM, WorkplanJetty, WorkplanTank,
 WorkplanSPM, IRKAPProgram, IRKAPActual
 
-Relasi yang tersedia (arah dari Equipment kecuali disebutkan lain):
-- HAS_NOTIFICATION (Equipment->SAPNotification)
-- HAS_WORK_ORDER (Equipment->SAPWorkOrder)
-- HAS_BOC (Equipment->BOC)
-- HAS_ICU (Equipment->ICUMonitoring)
-- HAS_BAD_ACTOR (Equipment->BadActor)
-- HAS_ATG (Equipment->ATGMonitoring)
-- HAS_METERING (Equipment->MeteringMonitor)
-- HAS_IRKAP (Equipment->IRKAPProgram, juga BadActor->IRKAPProgram)
-- HAS_PIPELINE_INSPECTION (Equipment->PipelineInspection)
-- HAS_ZERO_CLAMP (Equipment->ZeroClamp)
-- HAS_POWER_STREAM (Equipment->PowerStream)
-- IS_CRITICAL (Equipment->CriticalEquipment)
-- HAS_INSPECTION_PLAN (Equipment->InspectionPlan)
-- HAS_READINESS (Equipment->ReadinessJetty/ReadinessTank/ReadinessSPM)
-- HAS_WORKPLAN (Equipment->WorkplanJetty/WorkplanTank/WorkplanSPM)
-- HAS_IRKAP_ACTUAL (Equipment->IRKAPActual)
-- TERKAIT_DENGAN (Document->Equipment)
-- GENERATED_WO (SAPNotification->SAPWorkOrder)
-- HAS_ACTUAL (IRKAPProgram->IRKAPActual)
+Relasi yang tersedia (semua berasal dari Equipment kecuali disebutkan lain):
+- (Equipment)<-[:HAS_NOTIFICATION]-(SAPNotification)
+- (Equipment)<-[:HAS_WORK_ORDER]-(SAPWorkOrder)
+- (Equipment)<-[:HAS_BOC]-(BOC)
+- (Equipment)<-[:HAS_ICU]-(ICUMonitoring)
+- (Equipment)<-[:HAS_BAD_ACTOR]-(BadActor)
+- (Equipment)<-[:HAS_ATG]-(ATGMonitoring)
+- (Equipment)<-[:HAS_METERING]-(MeteringMonitor)
+- (Equipment)<-[:HAS_IRKAP]-(IRKAPProgram)
+- (Equipment)<-[:HAS_IRKAP_ACTUAL]-(IRKAPActual)
+- (Equipment)<-[:HAS_PIPELINE_INSPECTION]-(PipelineInspection)
+- (Equipment)<-[:HAS_ZERO_CLAMP]-(ZeroClamp)
+- (Equipment)<-[:HAS_POWER_STREAM]-(PowerStream)
+- (Equipment)<-[:IS_CRITICAL]-(CriticalEquipment)
+- (Equipment)<-[:HAS_INSPECTION_PLAN]-(InspectionPlan)
+- (Equipment)<-[:HAS_READINESS]-(ReadinessJetty / ReadinessTank / ReadinessSPM)
+- (Equipment)<-[:HAS_WORKPLAN]-(WorkplanJetty / WorkplanTank / WorkplanSPM)
+- (Document)-[:TERKAIT_DENGAN]->(Equipment)
+- (SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
+- (BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
+- (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
 
-Equipment punya property: tag_number, description, maintenance_plant
+Equipment punya property: tag_number, description, maintenance_plant, criticality
 Document punya property: doc_id, judul, tipe, ru
 
 Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20."""
@@ -358,11 +414,7 @@ def handle_graph(message: str) -> dict:
             try:
                 graph_ctx = get_equipment_context_from_graph(tag)
                 if graph_ctx:
-                    ctx_text = json.dumps(
-                        {k: [dict(n) for n in v] if isinstance(v, list) else dict(v) if hasattr(v, 'items') else v
-                         for k, v in graph_ctx.items()},
-                        default=str, ensure_ascii=False
-                    )
+                    ctx_text = _format_graph_context(tag, graph_ctx)
                     fmt_resp = client.chat.completions.create(
                         model=MODEL,
                         max_tokens=800,
@@ -376,7 +428,7 @@ Jawab secara terstruktur dan informatif."""
                             },
                             {
                                 "role": "user",
-                                "content": f"Pertanyaan: {message}\n\nData Knowledge Graph untuk equipment {tag}:\n{ctx_text}"
+                                "content": f"Pertanyaan: {message}\n\n{ctx_text}"
                             }
                         ]
                     )
@@ -472,11 +524,7 @@ def handle_hybrid(message: str, history: list = None) -> dict:
         try:
             graph_ctx = get_equipment_context_from_graph(tag)
             if graph_ctx:
-                graph_context_text = json.dumps(
-                    {k: [dict(n) for n in v] if isinstance(v, list) else dict(v) if hasattr(v, 'items') else v
-                     for k, v in graph_ctx.items()},
-                    default=str, ensure_ascii=False
-                )
+                graph_context_text = _format_graph_context(tag, graph_ctx)
                 combined_context += f"\n\n**Dari Knowledge Graph (equipment {tag}):**\n{graph_context_text[:2000]}"
         except Exception:
             pass

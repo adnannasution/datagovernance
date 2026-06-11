@@ -303,6 +303,42 @@ async def smart_search(request: Request):
         ]
     }
 
+@app.get("/api/search/all")
+async def api_search_all(q: str = "", ru: str = "", limit: int = 10):
+    """Unified search: documents (vector) + equipment graph (Neo4j)."""
+    if not q:
+        raise HTTPException(400, "Query required")
+
+    import asyncio
+    from embedder import get_embedding
+    from db import vector_search
+    from neo4j_sync import search_graph
+
+    # Vector search
+    try:
+        emb = get_embedding(q)
+        doc_results = vector_search(
+            query_embedding=emb,
+            ru=ru or None,
+            limit=limit,
+            threshold=0.3
+        )
+        docs = [dict(r) for r in doc_results]
+    except Exception:
+        docs = []
+
+    # Graph search
+    graph_results = search_graph(query=q, ru=ru or None, limit=limit)
+
+    return {
+        "query": q,
+        "documents": docs,
+        "equipment": graph_results,
+        "total_docs": len(docs),
+        "total_equipment": len(graph_results)
+    }
+
+
 @app.get("/api/search/graph")
 async def api_search_graph(q: str = "", ru: str = "", limit: int = 10):
     if not q:
