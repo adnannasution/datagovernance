@@ -33,13 +33,6 @@ def _get_db_schema() -> str:
 
 
 def _get_neo4j_schema() -> str:
-    try:
-        from schema_cache import get_neo4j_schema
-        schema = get_neo4j_schema()
-        if schema:
-            return schema
-    except Exception:
-        pass
     return NEO4J_SCHEMA_FALLBACK
 
 
@@ -89,28 +82,174 @@ DOKUMEN:
 """
 
 NEO4J_SCHEMA_FALLBACK = """
-Neo4j Knowledge Graph Schema (fallback):
-Relasi:
-  (Equipment)-[:HAS_BAD_ACTOR]->(BadActor)
-  (Equipment)-[:HAS_ICU]->(ICUMonitoring)
-  (Equipment)-[:HAS_NOTIFICATION]->(SAPNotification)
-  (Equipment)-[:HAS_WORK_ORDER]->(SAPWorkOrder)
-  (Equipment)-[:HAS_BOC]->(BOC)
-  (Equipment)-[:HAS_IRKAP_PROGRAM]->(IRKAPProgram)
-  (Equipment)-[:HAS_IRKAP_ACTUAL]->(IRKAPActual)
-  (Equipment)-[:HAS_ATG]->(ATGMonitoring)
-  (Equipment)-[:HAS_METERING]->(MeteringMonitor)
-  (Equipment)-[:HAS_PIPELINE_INSPECTION]->(PipelineInspection)
-  (Equipment)-[:HAS_INSPECTION_PLAN]->(InspectionPlan)
-  (Equipment)-[:HAS_ZERO_CLAMP]->(ZeroClamp)
-  (Equipment)-[:HAS_READINESS]->(ReadinessJetty/ReadinessTank/ReadinessSPM)
-  (Equipment)-[:HAS_WORKPLAN]->(WorkplanJetty/WorkplanTank/WorkplanSPM)
-  (Equipment)-[:IS_CRITICAL]->(CriticalEquipment)
-  (Equipment)-[:HAS_POWER_STREAM]->(PowerStream)
-  (Document)-[:TERKAIT_DENGAN]->(Equipment)
-  (SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
-  (BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
-  (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
+Knowledge Graph Neo4j — Schema Lengkap
+
+=== RELASI UTAMA (Equipment sebagai hub) ===
+(Equipment)-[:HAS_BAD_ACTOR]->(BadActor)
+(Equipment)-[:HAS_ICU]->(ICUMonitoring)
+(Equipment)-[:HAS_NOTIFICATION]->(SAPNotification)
+(Equipment)-[:HAS_WORK_ORDER]->(SAPWorkOrder)
+(Equipment)-[:HAS_BOC]->(BOC)
+(Equipment)-[:HAS_IRKAP_PROGRAM]->(IRKAPProgram)
+(Equipment)-[:HAS_IRKAP_ACTUAL]->(IRKAPActual)
+(Equipment)-[:HAS_ATG]->(ATGMonitoring)
+(Equipment)-[:HAS_METERING]->(MeteringMonitor)
+(Equipment)-[:HAS_PIPELINE_INSPECTION]->(PipelineInspection)
+(Equipment)-[:HAS_INSPECTION_PLAN]->(InspectionPlan)
+(Equipment)-[:HAS_ZERO_CLAMP]->(ZeroClamp)
+(Equipment)-[:HAS_READINESS]->(ReadinessJetty)
+(Equipment)-[:HAS_READINESS]->(ReadinessTank)
+(Equipment)-[:HAS_READINESS]->(ReadinessSPM)
+(Equipment)-[:HAS_WORKPLAN]->(WorkplanJetty)
+(Equipment)-[:HAS_WORKPLAN]->(WorkplanTank)
+(Equipment)-[:HAS_WORKPLAN]->(WorkplanSPM)
+(Equipment)-[:IS_CRITICAL]->(CriticalEquipment)
+(Equipment)-[:HAS_POWER_STREAM]->(PowerStream)
+(Document)-[:TERKAIT_DENGAN]->(Equipment)
+
+=== RELASI DOMAIN (lintas node) ===
+(SAPNotification)-[:GENERATED_WO]->(SAPWorkOrder)
+(BadActor)-[:HAS_IRKAP]->(IRKAPProgram)
+(IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
+
+=== NODE PROPERTIES ===
+
+NODE: Equipment  [tag: e.tag_number — SELALU gunakan e.tag_number bukan e.equipment]
+  tag_number, description, functional_location, maintenance_plant (kode RU),
+  location, criticality (A=sangat kritis, B=kritis, C=kurang kritis, Z=tidak kritis),
+  equipment_category, technical_obj_type, manufacturer, model_type, material
+
+NODE: BadActor  [tag: ba.tag_number]
+  tag_number, ru, status, problem, action_plan, progress,
+  target_date, periode, action_plan_category, no_irkap
+
+NODE: ICUMonitoring  [tag: icu.tag_no]
+  tag_no, ru, icu_status (contoh: "ICU", "Non-ICU", "Closed"),
+  issue, mitigation, mitigasi_category, permanent_solution,
+  solution_category, progress, target_closed, report_date
+
+NODE: SAPNotification  [tag: n.equipment]
+  notification, equipment, notif_type, notif_date, system_status,
+  description, order_no, functional_loc, location, criticality,
+  planner_group, main_workctr, maint_plant
+
+NODE: SAPWorkOrder  [tag: wo.equipment]
+  order_no, equipment, order_type, created_on, bas_start_date,
+  basic_fin_date, actual_finish, description, system_status, user_status,
+  total_plan_cost, total_act_cost, priority, maint_act_type, plant
+
+NODE: BOC  [tag: b.equipment]
+  equipment, ru, area, unit, grup_equipment, status,
+  frequency, running_hours, mttr, mtbf,
+  hasil (N+0=tidak ada standby KRITIS, N+1=ada 1 standby, N+2=ada 2 standby, Single=tunggal tanpa grup)
+
+NODE: IRKAPProgram  [tag: ip.equipment_tag_no]
+  equipment_tag_no, refinery_unit, disiplin, kategori_rkap,
+  no_program_kerja, type_equipment, program_kerja,
+  status_step, status_prognosa, start_plan, finish_plan,
+  nilai_anggaran_idr, nilai_anggaran_usd, top_risk, asset_integrity
+
+NODE: IRKAPActual  [tag: ia.tag_no]
+  tag_no, no_program, kategori_rkap, program_kerja, refinery_unit,
+  area, disiplin, status_step, status_prognosa, current_step,
+  notif_no, wo_no, pr, po, anggaran_idr, jadwal_pelaksanaan,
+  actual_start1, actual_finish1, failure_impact, rekomendasi
+
+NODE: ATGMonitoring  [tag: atg.tag_no_tangki]
+  tag_no_tangki, tag_no_atg, refinery_unit,
+  status_atg, status_interkoneksi_atg,
+  cert_no_atg, date_expired_atg, remark, rtl, action_plan_category,
+  status_rtl, month_update
+
+NODE: MeteringMonitor  [tag: m.tag_number]
+  tag_number, refinery_unit, status_metering,
+  cert_no_metering, date_expired_metering, remark,
+  rtl, action_plan_category, status_rtl, month_update
+
+NODE: PipelineInspection  [tag: pi.tag_number]
+  tag_number, refinery_unit, area, unit, fluida_service, nps,
+  from_location, to_location, last_inspection_date, next_inspection_date,
+  last_measured_thickness, rem_life_years, jumlah_temporary_repair, remarks
+
+NODE: InspectionPlan  [tag: insp.tag_no_ln]
+  tag_no_ln, refinery_unit, area, unit, type_equipment, type_inspection,
+  type_pekerjaan, due_date, plan_date, actual_date,
+  result_remaining_life, result_visual, grand_result
+
+NODE: ZeroClamp  [tag: zc.tag_no_ln]
+  tag_no_ln, ru, area, unit, services, description,
+  type_damage, posisi, type_perbaikan,
+  tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan,
+  status, remarks, no_irkap
+
+NODE: ReadinessJetty / ReadinessTank / ReadinessSPM  [tag: r.tag_no / r.tag_number]
+  refinery_unit, area, unit, status_operation,
+  status_laik_operasi, expired_laik_operasi, remark, month_update
+  (ReadinessTank juga punya: type_tangki, service_tangki, prioritas,
+   atg_certification_validity, status_coi, internal_inspection)
+
+NODE: WorkplanJetty / WorkplanTank / WorkplanSPM  [tag: wp.tag_no]
+  refinery_unit, area, unit, item, status_item,
+  remark, rtl_action_plan, action_plan_category, target, status_rtl, month_update
+
+NODE: CriticalEquipment  [tag: crit.equipment]
+  equipment, refinery_unit, unit_proses, highlight_issue,
+  corrective_action, target_corrective, traffic_corrective,
+  mitigasi_action, target_mitigasi, traffic_mitigasi
+
+NODE: PowerStream  [tag: ps.equipment]
+  equipment, refinery_unit, type_equipment, status_operation,
+  status_n0, unit_measurement, desain, kapasitas_max,
+  average_actual, remark, date_update
+
+=== CONTOH CYPHER QUERY ===
+
+-- Equipment critical A tanpa standby (BOC N+0):
+MATCH (e:Equipment)-[:HAS_BOC]->(b:BOC)
+WHERE e.criticality = 'A' AND b.hasil = 'N+0'
+RETURN e.tag_number, e.description, e.maintenance_plant, b.area, b.hasil LIMIT 20
+
+-- Equipment yang punya bad actor DAN ICU monitoring:
+MATCH (e:Equipment)-[:HAS_BAD_ACTOR]->(ba:BadActor)
+MATCH (e)-[:HAS_ICU]->(icu:ICUMonitoring)
+RETURN e.tag_number, e.description, ba.status, icu.icu_status LIMIT 20
+
+-- Equipment dengan program IRKAP dan actual-nya:
+MATCH (e:Equipment)-[:HAS_IRKAP_PROGRAM]->(ip:IRKAPProgram)
+OPTIONAL MATCH (ip)-[:HAS_ACTUAL]->(ia:IRKAPActual)
+RETURN e.tag_number, e.description, ip.program_kerja, ip.status_prognosa, ia.current_step LIMIT 20
+
+-- Cek status SAP notification dan work order terkait:
+MATCH (e:Equipment)-[:HAS_NOTIFICATION]->(n:SAPNotification)
+OPTIONAL MATCH (n)-[:GENERATED_WO]->(wo:SAPWorkOrder)
+RETURN e.tag_number, n.notification, n.description, wo.order_no, wo.system_status LIMIT 20
+
+-- Equipment dengan MTBF terendah:
+MATCH (e:Equipment)-[:HAS_BOC]->(b:BOC)
+WHERE b.mtbf IS NOT NULL AND b.mtbf > 0
+RETURN e.tag_number, e.description, b.mtbf, b.mttr ORDER BY b.mtbf ASC LIMIT 10
+
+-- Equipment yang masuk bad actor per RU:
+MATCH (e:Equipment)-[:HAS_BAD_ACTOR]->(ba:BadActor)
+WHERE ba.ru IS NOT NULL
+RETURN ba.ru, count(ba) AS jumlah ORDER BY jumlah DESC
+
+-- Status readiness equipment jetty:
+MATCH (e:Equipment)-[:HAS_READINESS]->(r:ReadinessJetty)
+RETURN e.tag_number, e.description, r.status_operation, r.refinery_unit LIMIT 20
+
+-- Zero clamp yang masih terpasang:
+MATCH (e:Equipment)-[:HAS_ZERO_CLAMP]->(zc:ZeroClamp)
+WHERE zc.tanggal_dilepas IS NULL
+RETURN e.tag_number, zc.area, zc.type_damage, zc.tanggal_dipasang, zc.status LIMIT 20
+
+=== ATURAN PENTING ===
+- SELALU gunakan e.tag_number untuk Equipment (BUKAN e.equipment)
+- Arah relasi SELALU (Equipment)-[:REL]->(Node), bukan sebaliknya
+- Untuk Document: (Document)-[:TERKAIT_DENGAN]->(Equipment)
+- Untuk domain relation: (BadActor)-[:HAS_IRKAP]->(IRKAPProgram) dan (IRKAPProgram)-[:HAS_ACTUAL]->(IRKAPActual)
+- Jangan filter nilai spesifik kecuali sudah pasti (gunakan IS NOT NULL lebih aman)
+- Selalu tambahkan LIMIT
 """
 
 # ─── Graph Context Helper ─────────────────────────────────────────────────────
@@ -477,21 +616,16 @@ Sertakan insight singkat jika relevan."""
 # ─── Graph Handler ────────────────────────────────────────────────────────────
 
 def _get_cypher_prompt() -> str:
-    """Build dynamic Cypher system prompt from Neo4j schema cache."""
-    neo4j_schema = _get_neo4j_schema()
-    return f"""Generate Cypher query untuk Neo4j berdasarkan pertanyaan.
+    return f"""Kamu adalah Cypher query generator untuk Neo4j Knowledge Graph Pertamina.
 
-{neo4j_schema}
+{NEO4J_SCHEMA_FALLBACK}
 
-ATURAN PENTING:
-- Selalu mulai MATCH dari Equipment sebagai hub pusat
-- Gunakan arah relasi yang benar sesuai schema di atas (Equipment)-[:REL]->(Node)
-- Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations
-- JANGAN filter WHERE dengan nilai spesifik ("Buruk", "Active") karena nilai tidak diketahui pasti
-- Gunakan IS NOT NULL untuk memastikan data ada, biarkan LLM analisis nilainya
-- Equipment node SELALU pakai e.tag_number (BUKAN e.equipment, BUKAN e.tag_no)
-- Untuk RETURN selalu gunakan: e.tag_number, e.description, e.maintenance_plant
-- Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20"""
+INSTRUKSI:
+- Generate Cypher query yang menjawab pertanyaan user
+- Ikuti contoh query di atas sebagai referensi pola yang benar
+- SELALU gunakan e.tag_number untuk Equipment node
+- Arah relasi SELALU (Equipment)-[:REL]->(Node) sesuai schema
+- Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa markdown backtick"""
 
 
 def handle_graph(message: str) -> dict:
