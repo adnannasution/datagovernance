@@ -808,6 +808,48 @@ def get_coverage_stats() -> dict:
         "neo4j_counts": neo4j_counts,
     }
 
+# ─── Graph Search ────────────────────────────────────────────────────────────
+
+def search_graph(query: str, ru: str = None, limit: int = 10) -> list:
+    """
+    Search Neo4j for equipment and related nodes matching the query.
+    Returns list of results with equipment info + connected node counts.
+    """
+    try:
+        with get_driver() as driver:
+            with driver.session() as session:
+                # Search equipment by tag_number or description (case-insensitive)
+                ru_filter = "AND e.maintenance_plant = $ru" if ru else ""
+                result = session.run(f"""
+                    MATCH (e:Equipment)
+                    WHERE (toLower(e.tag_number) CONTAINS toLower($query)
+                           OR toLower(e.description) CONTAINS toLower($query))
+                    {ru_filter}
+                    WITH e
+                    OPTIONAL MATCH (e)<-[r1:HAS_BAD_ACTOR]-()
+                    OPTIONAL MATCH (e)<-[r2:HAS_ICU]-()
+                    OPTIONAL MATCH (e)<-[r3:HAS_NOTIFICATION]-()
+                    OPTIONAL MATCH (e)<-[r4:HAS_WORK_ORDER]-()
+                    OPTIONAL MATCH (e)<-[r5:HAS_BOC]-()
+                    OPTIONAL MATCH (doc:Document)-[:TERKAIT_DENGAN]->(e)
+                    RETURN e.tag_number as tag_number,
+                           e.description as description,
+                           e.maintenance_plant as maintenance_plant,
+                           e.criticality as criticality,
+                           count(DISTINCT r1) as bad_actor_count,
+                           count(DISTINCT r2) as icu_count,
+                           count(DISTINCT r3) as notif_count,
+                           count(DISTINCT r4) as wo_count,
+                           count(DISTINCT r5) as boc_count,
+                           count(DISTINCT doc) as doc_count
+                    ORDER BY e.tag_number
+                    LIMIT $limit
+                """, {"query": query, "ru": ru, "limit": limit})
+                return [dict(r) for r in result]
+    except Exception as e:
+        return []
+
+
 # ─── Reset All Relations ──────────────────────────────────────────────────────
 
 def reset_all_relations() -> dict:

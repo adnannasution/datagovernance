@@ -303,6 +303,14 @@ async def smart_search(request: Request):
         ]
     }
 
+@app.get("/api/search/graph")
+async def api_search_graph(q: str = "", ru: str = "", limit: int = 10):
+    if not q:
+        raise HTTPException(400, "Query tidak boleh kosong")
+    from neo4j_sync import search_graph
+    results = search_graph(query=q, ru=ru or None, limit=limit)
+    return {"query": q, "total": len(results), "results": results}
+
 # ─── GOVERNANCE ROUTES ───────────────────────────────────────────────────────
 
 from db_equipment import (
