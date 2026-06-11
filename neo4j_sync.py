@@ -382,15 +382,18 @@ RETURN count(n) AS nc
     return {"nodes_created": nodes_created, "rels_created": rels_created}
 
 
-def sync_all_tables(progress_callback=None):
-    """Sync all tables defined in TABLE_NEO4J_CONFIG. Returns summary dict."""
+def sync_all_tables(source_table: str = None, progress_callback=None):
+    """Sync all tables (or a specific table) defined in TABLE_NEO4J_CONFIG."""
     from db_equipment import TABLE_CATALOG
 
-    # Build lookup from TABLE_CATALOG for tag_col
     tag_col_lookup = {entry["table"]: entry["tag_col"] for entry in TABLE_CATALOG}
 
+    tables = TABLE_NEO4J_CONFIG.items()
+    if source_table:
+        tables = [(source_table, TABLE_NEO4J_CONFIG[source_table])] if source_table in TABLE_NEO4J_CONFIG else []
+
     summary = {}
-    for table_name, config in TABLE_NEO4J_CONFIG.items():
+    for table_name, config in tables:
         tag_col = tag_col_lookup.get(table_name)
         if not tag_col:
             summary[table_name] = {"error": "tag_col not found in TABLE_CATALOG"}
