@@ -504,6 +504,8 @@ Jawab secara terstruktur dan informatif."""
         }
 
     except Exception as e:
+        import traceback, logging
+        logging.error(f"[GRAPH ERROR] {e}\n{traceback.format_exc()}")
         return {
             "type": "graph",
             "answer": f"Knowledge Graph tidak dapat diakses: {str(e)}",
@@ -516,8 +518,14 @@ Jawab secara terstruktur dan informatif."""
 
 def handle_hybrid(message: str, history: list = None) -> dict:
     """Kombinasi RAG + SQL + Graph (jika tag terdeteksi), gabungkan hasilnya."""
-    rag_result = handle_rag(message)
-    sql_result = handle_sql(message, history)
+    try:
+        rag_result = handle_rag(message)
+    except Exception:
+        rag_result = {"answer": "", "sources": [], "data": []}
+    try:
+        sql_result = handle_sql(message, history)
+    except Exception:
+        sql_result = {"answer": "", "data": [], "sql": ""}
 
     # Gabungkan context
     combined_context = ""
@@ -542,26 +550,32 @@ def handle_hybrid(message: str, history: list = None) -> dict:
             pass
 
     # Final synthesis
-    synth = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=800,
-        messages=[
-            {
-                "role": "system",
-                "content": """Kamu adalah asisten data governance Pertamina senior.
+    try:
+        synth = client.chat.completions.create(
+            model=MODEL,
+            max_tokens=800,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Kamu adalah asisten data governance Pertamina senior.
 Gabungkan informasi dari dokumen, database, dan Knowledge Graph untuk menjawab pertanyaan secara komprehensif.
 Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
-            },
-            {
-                "role": "user",
-                "content": f"Pertanyaan: {message}\n\nInformasi yang tersedia:\n{combined_context}"
-            }
-        ]
-    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Pertanyaan: {message}\n\nInformasi yang tersedia:\n{combined_context}"
+                }
+            ]
+        )
+        answer = synth.choices[0].message.content
+    except Exception as e:
+        import traceback, logging
+        logging.error(f"[HYBRID SYNTHESIS ERROR] {e}\n{traceback.format_exc()}")
+        answer = combined_context or "Tidak dapat memproses pertanyaan saat ini."
 
     return {
         "type": "hybrid",
-        "answer": synth.choices[0].message.content,
+        "answer": answer,
         "sources": rag_result.get("sources", []),
         "sql": sql_result.get("sql", ""),
         "sql_data": sql_result.get("data", []),
