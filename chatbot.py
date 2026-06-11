@@ -797,6 +797,88 @@ Sertakan insight singkat jika relevan."""
         "error": None
     }
 
+# ─── SQL Fallback untuk tag yang tidak ada di Neo4j ──────────────────────────
+
+def _handle_tag_sql_fallback(tag: str, message: str) -> dict | None:
+    """Query semua tabel PostgreSQL untuk tag yang tidak ada di Neo4j."""
+    from db_equipment import get_conn
+
+    TAG_TABLES = [
+        ("master_data_equipment",  "equipment"),
+        ("bad_actor_monitoring",   "tag_number"),
+        ("icu_monitoring",         "tag_no"),
+        ("boc",                    "equipment"),
+        ("sap_notifications",      "equipment"),
+        ("sap_work_orders",        "equipment"),
+        ("atg_monitoring",         "tag_no_tangki"),
+        ("metering_monitoring",    "tag_number"),
+        ("pipeline_inspection",    "tag_number"),
+        ("zero_clamp",             "tag_no_ln"),
+        ("inspection_plan",        "tag_no_ln"),
+        ("irkap_program",          "equipment_tag_no"),
+        ("irkap_actual",           "tag_no"),
+        ("readiness_jetty",        "tag_no"),
+        ("readiness_tank",         "tag_number"),
+        ("readiness_spm",          "tag_no"),
+        ("workplan_jetty",         "tag_no"),
+        ("workplan_tank",          "tag_no"),
+        ("spm_workplan",           "tag_no"),
+        ("critical_eqp_prim_sec",  "equipment"),
+        ("power_stream",           "equipment"),
+    ]
+
+    found = {}
+    try:
+        with get_conn() as conn:
+            for table, col in TAG_TABLES:
+                try:
+                    rows = conn.execute(
+                        f"SELECT * FROM {table} WHERE {col} = %s LIMIT 5",
+                        (tag,)
+                    ).fetchall()
+                    if rows:
+                        found[table] = [dict(r) for r in rows]
+                except Exception:
+                    pass
+    except Exception:
+        return None
+
+    if not found:
+        return None
+
+    # Format semua data yang ditemukan
+    context = f"Data ditemukan di PostgreSQL untuk tag {tag}:\n"
+    for table, rows in found.items():
+        context += f"\n[{table}] ({len(rows)} baris):\n"
+        context += json.dumps(rows[:3], default=str, ensure_ascii=False)
+
+    fmt_resp = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=600,
+        messages=[
+            {
+                "role": "system",
+                "content": """Kamu adalah asisten data governance Pertamina.
+Tag equipment ini tidak ditemukan di Knowledge Graph tapi datanya ada di database.
+Jawab pertanyaan berdasarkan data yang ditemukan. Jawab dalam Bahasa Indonesia."""
+            },
+            {
+                "role": "user",
+                "content": f"Pertanyaan: {message}\n\n{context}"
+            }
+        ]
+    )
+
+    return {
+        "type": "sql",
+        "answer": fmt_resp.choices[0].message.content,
+        "sql": f"SQL fallback for tag: {tag} (found in: {', '.join(found.keys())})",
+        "data": {t: rows for t, rows in list(found.items())[:5]},
+        "tag": tag,
+        "note": "Data dari PostgreSQL (tag belum tersinkron ke Knowledge Graph)"
+    }
+
+
 # ─── Graph Handler ────────────────────────────────────────────────────────────
 
 def _get_cypher_prompt() -> str:
@@ -871,6 +953,11 @@ Jawab secara terstruktur dan informatif."""
                 data = [dict(r) for r in result]
 
         if not data:
+            # Fallback ke SQL jika tag terdeteksi tapi tidak ada di graph
+            if tag:
+                sql_result = _handle_tag_sql_fallback(tag, message)
+                if sql_result:
+                    return sql_result
             return {
                 "type": "graph",
                 "answer": "Tidak ditemukan data di Knowledge Graph untuk pertanyaan ini.",
