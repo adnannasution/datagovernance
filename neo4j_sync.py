@@ -705,3 +705,105 @@ def get_graph_for_tag(tag: str, depth: int = 1):
         return {"nodes": nodes, "edges": edges, "error": str(e)}
 
     return {"nodes": nodes, "edges": edges}
+
+
+def get_coverage_stats() -> dict:
+    """
+    Compare PostgreSQL record counts vs Neo4j connected nodes per table.
+    Returns coverage % per table/domain.
+    """
+    from db_equipment import get_conn as pg_conn, TABLE_CATALOG
+
+    # Get Neo4j counts per label
+    neo4j_counts = {}
+    try:
+        with get_driver() as driver:
+            with driver.session() as session:
+                for lbl in ["Equipment", "SAPNotification", "SAPWorkOrder",
+                            "BadActor", "ICUMonitoring", "ATGMonitoring",
+                            "MeteringMonitor", "BOC", "PipelineInspection",
+                            "ZeroClamp", "PowerStream", "CriticalEquipment",
+                            "InspectionPlan", "ReadinessJetty", "ReadinessTank",
+                            "ReadinessSPM", "WorkplanJetty", "WorkplanTank",
+                            "WorkplanSPM", "IRKAPProgram", "IRKAPActual", "Document"]:
+                    try:
+                        r = session.run(f"MATCH (n:{lbl}) RETURN count(n) as cnt").single()
+                        neo4j_counts[lbl] = r["cnt"] if r else 0
+                    except:
+                        neo4j_counts[lbl] = 0
+    except:
+        pass
+
+    # Map table name to neo4j label
+    TABLE_TO_LABEL = {
+        "master_data_equipment": "Equipment",
+        "sap_notifications": "SAPNotification",
+        "sap_work_orders": "SAPWorkOrder",
+        "bad_actor_monitoring": "BadActor",
+        "icu_monitoring": "ICUMonitoring",
+        "atg_monitoring": "ATGMonitoring",
+        "metering_monitoring": "MeteringMonitor",
+        "boc": "BOC",
+        "pipeline_inspection": "PipelineInspection",
+        "zero_clamp": "ZeroClamp",
+        "power_stream": "PowerStream",
+        "critical_eqp_prim_sec": "CriticalEquipment",
+        "inspection_plan": "InspectionPlan",
+        "readiness_jetty": "ReadinessJetty",
+        "readiness_tank": "ReadinessTank",
+        "readiness_spm": "ReadinessSPM",
+        "workplan_jetty": "WorkplanJetty",
+        "workplan_tank": "WorkplanTank",
+        "spm_workplan": "WorkplanSPM",
+        "irkap_program": "IRKAPProgram",
+        "irkap_actual": "IRKAPActual",
+        "doc_registry": "Document",
+    }
+
+    results = []
+    with pg_conn() as conn:
+        for tbl in TABLE_CATALOG:
+            table_name = tbl["table"]
+            label = TABLE_TO_LABEL.get(table_name, "")
+            try:
+                total_pg = conn.execute(f"SELECT COUNT(*) as n FROM {table_name}").fetchone()["n"]
+            except:
+                total_pg = 0
+
+            connected = neo4j_counts.get(label, 0)
+            coverage_pct = round(connected * 100 / total_pg, 1) if total_pg > 0 else 0
+
+            results.append({
+                "table": table_name,
+                "label": tbl["label"],
+                "domain": tbl["domain"],
+                "neo4j_label": label,
+                "total_pg": total_pg,
+                "connected": connected,
+                "not_connected": max(0, total_pg - connected),
+                "coverage_pct": coverage_pct,
+            })
+
+    # Domain summary
+    domains = {}
+    for r in results:
+        d = r["domain"]
+        if d not in domains:
+            domains[d] = {"domain": d, "total_pg": 0, "connected": 0}
+        domains[d]["total_pg"] += r["total_pg"]
+        domains[d]["connected"] += r["connected"]
+
+    for d in domains.values():
+        d["coverage_pct"] = round(d["connected"] * 100 / d["total_pg"], 1) if d["total_pg"] > 0 else 0
+
+    total_pg = sum(r["total_pg"] for r in results)
+    total_connected = sum(r["connected"] for r in results)
+
+    return {
+        "tables": results,
+        "domains": list(domains.values()),
+        "total_pg": total_pg,
+        "total_connected": total_connected,
+        "overall_pct": round(total_connected * 100 / total_pg, 1) if total_pg > 0 else 0,
+        "neo4j_counts": neo4j_counts,
+    }

@@ -498,6 +498,11 @@ async def api_sync_domain_relations(background_tasks: BackgroundTasks):
 async def api_domain_relations_status():
     return {"running": _domain_rel_running, "last_result": _last_domain_rel_result}
 
+@app.get("/api/neo4j/coverage")
+async def api_neo4j_coverage():
+    from neo4j_sync import get_coverage_stats
+    return get_coverage_stats()
+
 # ─── CHATBOT ROUTES ──────────────────────────────────────────────────────────
 
 from chatbot import chat as chatbot_chat
