@@ -496,3 +496,101 @@ async def api_chat(request: Request):
 
     result = chatbot_chat(message, history=history, filters=filters)
     return result
+
+# ─── TAG MAPPING ROUTES ──────────────────────────────────────────────────────
+
+import db_tag_mapping as _db_tm
+from tag_resolver import generate_candidates
+
+_mapping_running = False
+_last_mapping_result = None
+
+
+def _run_generate_candidates():
+    global _mapping_running, _last_mapping_result
+    _mapping_running = True
+    try:
+        _last_mapping_result = generate_candidates()
+    finally:
+        _mapping_running = False
+
+
+@app.get("/tag-mapping", response_class=HTMLResponse)
+async def page_tag_mapping(
+    request: Request,
+    ru: str = "",
+    source_table: str = "",
+    status: str = "pending",
+    page: int = 1,
+):
+    limit = 50
+    mappings, total = _db_tm.get_pending_mappings(
+        ru=ru or None,
+        source_table=source_table or None,
+        status=status or None,
+        page=page,
+        limit=limit,
+    )
+    stats = _db_tm.get_mapping_stats()
+    ru_list = _db_tm.get_ru_list()
+    table_list = _db_tm.get_source_table_list()
+    offset = (page - 1) * limit
+    return templates.TemplateResponse(request, "tag_mapping.html", {
+        "mappings": mappings,
+        "total": total,
+        "page": page,
+        "total_pages": (total + limit - 1) // limit,
+        "offset": offset,
+        "stats": stats,
+        "ru_list": ru_list,
+        "table_list": table_list,
+        "filters": {"ru": ru, "source_table": source_table, "status": status},
+        "title": "Tag Mapping",
+    })
+
+
+@app.post("/api/tag-mapping/generate")
+async def api_generate_mappings(background_tasks: BackgroundTasks):
+    global _mapping_running
+    if _mapping_running:
+        return {"message": "Generate sudah berjalan"}
+    background_tasks.add_task(_run_generate_candidates)
+    return {"message": "Generate kandidat dimulai di background"}
+
+
+@app.get("/api/tag-mapping/status")
+async def api_mapping_status():
+    return {"running": _mapping_running, "last_result": _last_mapping_result}
+
+
+@app.post("/api/tag-mapping/{mapping_id}/approve")
+async def api_approve(mapping_id: int, request: Request):
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    validated_by = body.get("validated_by", "user")
+    _db_tm.approve_mapping(mapping_id, validated_by)
+    return {"ok": True}
+
+
+@app.post("/api/tag-mapping/{mapping_id}/reject")
+async def api_reject(mapping_id: int, request: Request):
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    validated_by = body.get("validated_by", "user")
+    _db_tm.reject_mapping(mapping_id, validated_by)
+    return {"ok": True}
+
+
+@app.post("/api/tag-mapping/bulk-approve")
+async def api_bulk_approve(request: Request):
+    body = await request.json()
+    ids = body.get("ids", [])
+    validated_by = body.get("validated_by", "user")
+    approved = _db_tm.bulk_approve(ids, validated_by)
+    return {"approved": approved}
