@@ -293,7 +293,26 @@ ATURAN:
 - Gunakan LIMIT maksimal 50
 - Gunakan ILIKE untuk pencarian teks
 - Jika filter RU, gunakan kolom refinery_unit atau ru atau maintenance_plant
-- Kembalikan HANYA query SQL, tanpa penjelasan, tanpa markdown backtick"""
+- Kembalikan HANYA query SQL, tanpa penjelasan, tanpa markdown backtick
+
+PENTING - kolom tag number berbeda per tabel, gunakan ini saat JOIN:
+- master_data_equipment: equipment
+- bad_actor_monitoring: tag_number
+- icu_monitoring: tag_no
+- atg_monitoring: tag_no_tangki
+- metering_monitoring: tag_number
+- boc: equipment
+- sap_notifications: equipment
+- sap_work_orders: equipment
+- pipeline_inspection: tag_number
+- zero_clamp: tag_no_ln
+- irkap_program: tag_number
+
+Contoh JOIN bad_actor + icu:
+SELECT b.tag_number, b.status, i.icu_status
+FROM bad_actor_monitoring b
+JOIN icu_monitoring i ON b.tag_number = i.tag_no
+LIMIT 20"""
             },
             {
                 "role": "user",
