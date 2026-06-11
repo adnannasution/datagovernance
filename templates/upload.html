@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="upload-container">
+  <div id="drop-zone" class="drop-zone">
+    <svg viewBox="0 0 24 24" class="drop-icon"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div class="drop-title">Drag & drop file di sini</div>
+    <div class="drop-sub">PDF, Word, Excel, PowerPoint · Maks 50MB</div>
+    <label class="btn mt-sm">
+      Pilih File
+      <input type="file" id="file-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt" hidden/>
+    </label>
+  </div>
+
+  <div id="file-info" class="file-info hidden">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <span id="file-name-display"></span>
+    <button type="button" class="btn-icon" onclick="clearFile()">✕</button>
+  </div>
+
+  <form id="upload-form" class="upload-form">
+    <div class="form-grid">
+      <div class="form-col">
+        <div class="form-group">
+          <label>Judul Dokumen <span class="required">*</span></label>
+          <input type="text" name="judul" id="judul" placeholder="Contoh: Inspection Report Pompa 4B-P-001" required/>
+        </div>
+        <div class="form-group">
+          <label>Tipe Dokumen <span class="required">*</span></label>
+          <select name="tipe_dokumen" required>
+            <option value="">— Pilih tipe —</option>
+            {% for t in tipe_list %}
+            <option value="{{ t }}">{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Refinery Unit</label>
+          <select name="ru">
+            <option value="">— Pilih RU —</option>
+            {% for r in ru_list %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-col">
+        <div class="form-group">
+          <label>Nomor Dokumen</label>
+          <input type="text" name="nomor_dokumen" placeholder="Opsional · contoh: DOC-RU4-2025-001"/>
+        </div>
+        <div class="form-group">
+          <label>Tag Number Terkait</label>
+          <div class="tag-input-wrap">
+            <input type="text" id="tag-input" placeholder="Ketik tag lalu Enter · contoh: 4B-P-001"/>
+          </div>
+          <div id="tag-pills" class="tag-pills"></div>
+          <input type="hidden" name="tag_numbers" id="tag-numbers-hidden"/>
+        </div>
+        <div class="form-group">
+          <label>Deskripsi</label>
+          <textarea name="deskripsi" rows="4" placeholder="Ringkasan singkat isi dokumen..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="/library" class="btn btn-secondary">Batal</a>
+      <button type="submit" class="btn btn-primary" id="submit-btn">Upload & Proses</button>
+    </div>
+  </form>
+
+  <div id="progress-box" class="progress-box hidden">
+    <div class="progress-title">Mengupload dan memproses dokumen...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-status" id="progress-status">Mengupload file...</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFile = null;
+let tagList = [];
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const fileInfo = document.getElementById('file-info');
+const fileNameDisplay = document.getElementById('file-name-display');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(file) {
+  selectedFile = file;
+  fileNameDisplay.textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
+  fileInfo.classList.remove('hidden');
+  dropZone.classList.add('hidden');
+  // Auto-isi judul dari nama file
+  const judul = document.getElementById('judul');
+  if (!judul.value) {
+    judul.value = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  }
+}
+
+function clearFile() {
+  selectedFile = null;
+  fileInput.value = '';
+  fileInfo.classList.add('hidden');
+  dropZone.classList.remove('hidden');
+}
+
+// Tag input
+document.getElementById('tag-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = this.value.trim().toUpperCase();
+    if (val && !tagList.includes(val)) {
+      tagList.push(val);
+      renderTags();
+    }
+    this.value = '';
+  }
+});
+
+function renderTags() {
+  const container = document.getElementById('tag-pills');
+  container.innerHTML = tagList.map(t =>
+    `<span class="tag-pill">${t} <button type="button" onclick="removeTag('${t}')">×</button></span>`
+  ).join('');
+  document.getElementById('tag-numbers-hidden').value = tagList.join(',');
+}
+
+function removeTag(t) {
+  tagList = tagList.filter(x => x !== t);
+  renderTags();
+}
+
+// Submit
+document.getElementById('upload-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  if (!selectedFile) { alert('Pilih file terlebih dahulu'); return; }
+
+  const formData = new FormData(this);
+  formData.append('file', selectedFile);
+
+  document.getElementById('progress-box').classList.remove('hidden');
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('progress-fill').style.width = '30%';
+  document.getElementById('progress-status').textContent = 'Mengupload file...';
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload gagal');
+
+    document.getElementById('progress-fill').style.width = '60%';
+    document.getElementById('progress-status').textContent = 'Memproses dokumen...';
+
+    // Poll status
+    const docId = data.doc_id;
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const sr = await fetch(`/api/document/${docId}/status`);
+      const sd = await sr.json();
+      if (sd.status === 'ready') {
+        clearInterval(poll);
+        document.getElementById('progress-fill').style.width = '100%';
+        document.getElementById('progress-status').textContent = `Selesai! ${sd.total_chunks} chunks dibuat.`;
+        setTimeout(() => { window.location.href = `/document/${docId}`; }, 1200);
+      } else if (sd.status === 'error') {
+        clearInterval(poll);
+        document.getElementById('progress-status').textContent = 'Error: ' + sd.error_message;
+        document.getElementById('progress-fill').style.background = '#e24b4a';
+      } else if (attempts > 120) {
+        clearInterval(poll);
+        document.getElementById('progress-status').textContent = 'Timeout. Cek halaman library.';
+      }
+      const pct = Math.min(60 + attempts * 2, 95);
+      document.getElementById('progress-fill').style.width = pct + '%';
+    }, 2000);
+
+  } catch (err) {
+    document.getElementById('progress-status').textContent = 'Error: ' + err.message;
+    document.getElementById('progress-fill').style.background = '#e24b4a';
+  }
+});
+</script>
+{% endblock %}

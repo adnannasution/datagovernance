@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block content %}
+{% set h = data.health %}
+{% set m = data.master %}
+
+<div class="detail-header mb-lg">
+  <div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:4px">
+      <a href="/equipment" style="color:var(--text3);text-decoration:none">Equipment</a> / {{ tag }}
+    </div>
+    <h2 class="detail-title">{{ m.description or tag }}</h2>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      {% if m.maintenance_plant %}<span class="badge badge-ru">{{ m.maintenance_plant }}</span>{% endif %}
+      {% if m.criticality %}<span class="badge {% if m.criticality=='A' %}badge-error{% elif m.criticality=='B' %}badge-pending{% else %}badge-ready{% endif %}">Criticality {{ m.criticality }}</span>{% endif %}
+      {% if m.equipment_category %}<span class="badge badge-tipe">{{ m.equipment_category }}</span>{% endif %}
+    </div>
+  </div>
+  <div style="text-align:center;flex-shrink:0">
+    <div style="width:80px;height:80px;border-radius:50%;border:4px solid {% if h.color=='green' %}var(--success){% elif h.color=='yellow' %}#eab308{% else %}var(--danger){% endif %};display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 4px">
+      <div style="font-size:20px;font-weight:600">{{ h.score }}</div>
+      <div style="font-size:9px;color:var(--text3)">score</div>
+    </div>
+    <div style="font-size:12px;font-weight:500;color:{% if h.color=='green' %}var(--success){% elif h.color=='yellow' %}#854f0b{% else %}var(--danger){% endif %}">{{ h.label }}</div>
+  </div>
+</div>
+
+{% if h.alerts %}
+<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
+  {% for alert in h.alerts %}
+  <div style="padding:8px 12px;border-radius:var(--radius);font-size:13px;background:{% if alert.level=='red' %}var(--danger-bg){% else %}var(--warning-bg){% endif %};color:{% if alert.level=='red' %}var(--danger){% else %}var(--warning){% endif %}">
+    ⚠ {{ alert.msg }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- TAB NAVIGATION -->
+<div class="tab-nav" id="tab-nav">
+  <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="showTab('sap')">SAP ({{ data.notif|length + data.wo|length }})</button>
+  <button class="tab-btn" onclick="showTab('monitoring')">Monitoring</button>
+  <button class="tab-btn" onclick="showTab('readiness')">Readiness & Workplan</button>
+  <button class="tab-btn" onclick="showTab('irkap')">IRKAP</button>
+  <button class="tab-btn" onclick="showTab('dokumen')">Dokumen</button>
+</div>
+
+<!-- TAB: OVERVIEW -->
+<div id="tab-overview" class="tab-content">
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Data Master</div>
+      {% if m %}
+      {% for k, v in m.items() %}
+      {% if v and v != '' %}
+      <div class="info-row"><span class="info-label">{{ k }}</span><span style="font-size:13px">{{ v }}</span></div>
+      {% endif %}
+      {% endfor %}
+      {% else %}
+      <p class="empty-text">Tidak ada data master</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <div class="card-title">Ringkasan</div>
+      <div class="info-row"><span class="info-label">Notifikasi</span><span>{{ data.notif_sum.total }} total · {{ data.notif_sum.overdue }} overdue</span></div>
+      <div class="info-row"><span class="info-label">Work Order</span><span>{{ data.wo_sum.total }} total · {{ data.wo_sum.open }} open · {{ data.wo_sum.overdue }} overdue</span></div>
+      <div class="info-row"><span class="info-label">Bad Actor</span><span>{{ data.bad_actor|length }} record</span></div>
+      <div class="info-row"><span class="info-label">ICU</span><span>{{ data.icu|length }} record</span></div>
+      <div class="info-row"><span class="info-label">Zero Clamp</span><span>{{ data.zero_clamp|length }} record</span></div>
+      <div class="info-row"><span class="info-label">Pipeline</span><span>{{ data.pipeline|length }} record</span></div>
+      <div class="info-row"><span class="info-label">Inspection Plan</span><span>{{ data.insp_plan|length }} record</span></div>
+      <div class="info-row"><span class="info-label">IRKAP Program</span><span>{{ data.irkap_program|length }} record</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB: SAP -->
+<div id="tab-sap" class="tab-content hidden">
+  <div class="card mb-lg">
+    <div class="card-title">SAP Notifications ({{ data.notif|length }})</div>
+    {% if data.notif %}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Notif</th><th>Tipe</th><th>Tanggal</th><th>Deskripsi</th><th>Status</th><th>WO</th><th>Due</th></tr></thead>
+        <tbody>
+          {% for n in data.notif[:20] %}
+          <tr>
+            <td style="font-family:monospace;font-size:12px">{{ n.notification }}</td>
+            <td>{{ n.notif_type or '—' }}</td>
+            <td style="white-space:nowrap;font-size:12px">{{ n.notif_date or '—' }}</td>
+            <td style="max-width:200px">{{ n.description or '—' }}</td>
+            <td><span class="badge {% if 'OSNO' in (n.system_status or '') %}badge-pending{% else %}badge-ready{% endif %}">{{ n.system_status or '—' }}</span></td>
+            <td style="font-family:monospace;font-size:12px">{{ n.order_no or '—' }}</td>
+            <td style="white-space:nowrap;font-size:12px;color:{% if n.required_end and n.order_no == None %}var(--danger){% else %}var(--text3){% endif %}">{{ n.required_end or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-text">Tidak ada notifikasi</p>{% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">Work Orders ({{ data.wo|length }})</div>
+    {% if data.wo %}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Order</th><th>Tipe</th><th>Dibuat</th><th>Deskripsi</th><th>Status</th><th>Due</th><th>Biaya Aktual</th></tr></thead>
+        <tbody>
+          {% for w in data.wo[:20] %}
+          <tr>
+            <td style="font-family:monospace;font-size:12px">{{ w.order_no }}</td>
+            <td>{{ w.order_type or '—' }}</td>
+            <td style="white-space:nowrap;font-size:12px">{{ w.created_on or '—' }}</td>
+            <td style="max-width:200px">{{ w.description or '—' }}</td>
+            <td><span class="badge {% if 'TECO' in (w.system_status or '') or 'CLSD' in (w.system_status or '') %}badge-ready{% else %}badge-pending{% endif %}">{{ w.system_status or '—' }}</span></td>
+            <td style="white-space:nowrap;font-size:12px">{{ w.basic_fin_date or '—' }}</td>
+            <td style="font-size:12px">{{ w.total_act_cost or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-text">Tidak ada work order</p>{% endif %}
+  </div>
+</div>
+
+<!-- TAB: MONITORING -->
+<div id="tab-monitoring" class="tab-content hidden">
+  {% macro simple_table(rows, title) %}
+  <div class="card mb-lg">
+    <div class="card-title">{{ title }} ({{ rows|length }})</div>
+    {% if rows %}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>{% for k in rows[0].keys() %}<th style="white-space:nowrap">{{ k }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in rows[:10] %}
+          <tr>{% for v in row.values() %}<td style="font-size:12px;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">{{ v if v is not none else '—' }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-text">Tidak ada data</p>{% endif %}
+  </div>
+  {% endmacro %}
+
+  {{ simple_table(data.bad_actor, "Bad Actor") }}
+  {{ simple_table(data.icu, "ICU Monitoring") }}
+  {{ simple_table(data.boc, "BOC") }}
+  {{ simple_table(data.atg, "ATG Monitoring") }}
+  {{ simple_table(data.metering, "Metering") }}
+  {{ simple_table(data.pipeline, "Pipeline Inspection") }}
+  {{ simple_table(data.zero_clamp, "Zero Clamp") }}
+  {{ simple_table(data.critical, "Critical Equipment") }}
+  {{ simple_table(data.power_stream, "Power & Stream") }}
+  {{ simple_table(data.insp_plan, "Inspection Plan") }}
+</div>
+
+<!-- TAB: READINESS & WORKPLAN -->
+<div id="tab-readiness" class="tab-content hidden">
+  {% for label, rows in [("Readiness Jetty", data.readiness.jetty), ("Readiness Tank", data.readiness.tank), ("Readiness SPM", data.readiness.spm), ("Workplan Jetty", data.workplan.jetty), ("Workplan Tank", data.workplan.tank), ("Workplan SPM", data.workplan.spm)] %}
+  {% if rows %}
+  <div class="card mb-lg">
+    <div class="card-title">{{ label }} ({{ rows|length }})</div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>{% for k in rows[0].keys() %}<th style="white-space:nowrap">{{ k }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in rows[:10] %}
+          <tr>{% for v in row.values() %}<td style="font-size:12px;white-space:nowrap">{{ v if v is not none else '—' }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+<!-- TAB: IRKAP -->
+<div id="tab-irkap" class="tab-content hidden">
+  <div class="card mb-lg">
+    <div class="card-title">IRKAP Program ({{ data.irkap_program|length }})</div>
+    {% if data.irkap_program %}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>{% for k in data.irkap_program[0].keys() %}<th style="white-space:nowrap">{{ k }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in data.irkap_program %}
+          <tr>{% for v in row.values() %}<td style="font-size:12px;white-space:nowrap">{{ v if v is not none else '—' }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-text">Tidak ada data IRKAP Program</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-title">IRKAP Actual ({{ data.irkap_actual|length }})</div>
+    {% if data.irkap_actual %}
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr>{% for k in data.irkap_actual[0].keys() %}<th style="white-space:nowrap">{{ k }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in data.irkap_actual %}
+          <tr>{% for v in row.values() %}<td style="font-size:12px;white-space:nowrap">{{ v if v is not none else '—' }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="empty-text">Tidak ada data IRKAP Actual</p>{% endif %}
+  </div>
+</div>
+
+<!-- TAB: DOKUMEN -->
+<div id="tab-dokumen" class="tab-content hidden">
+  <div id="doc-list-container">
+    <div class="empty-text" style="padding:2rem">Memuat dokumen terkait...</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  event.target.classList.add('active');
+  if (name === 'dokumen') loadDokumen();
+}
+
+async function loadDokumen() {
+  const container = document.getElementById('doc-list-container');
+  if (container.dataset.loaded) return;
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query: '{{ tag }}', tag_number: '{{ tag }}', limit: 20, threshold: 0.1})
+    });
+    const data = await res.json();
+    if (!data.results || data.results.length === 0) {
+      container.innerHTML = '<p class="empty-text" style="padding:2rem">Tidak ada dokumen terkait tag ini</p>';
+      return;
+    }
+    container.innerHTML = data.results.map(r => `
+      <div class="result-card" style="margin-bottom:10px">
+        <div class="result-meta">
+          <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
+          ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
+          <span class="badge badge-tipe">${r.tipe_dokumen}</span>
+          ${r.halaman ? `<span class="result-loc">Hal. ${r.halaman}</span>` : ''}
+        </div>
+        <div class="result-content">${r.content.substring(0,200)}...</div>
+        <div class="result-score-row">
+          <div class="score-bar" style="flex:1"><div class="score-fill" style="width:${Math.round(r.score*100)}%"></div></div>
+          <span class="score-label">${Math.round(r.score*100)}% relevan</span>
+        </div>
+      </div>
+    `).join('');
+    container.dataset.loaded = '1';
+  } catch(e) {
+    container.innerHTML = '<p class="empty-text">Gagal memuat dokumen</p>';
+  }
+}
+</script>
+{% endblock %}

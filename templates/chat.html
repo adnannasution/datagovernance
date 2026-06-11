@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="chat-layout">
+
+  <!-- Sidebar kiri: filter + suggestions -->
+  <div class="chat-sidebar">
+    <div class="card mb-lg">
+      <div class="card-title">Filter Konteks</div>
+      <div class="form-group">
+        <label>Refinery Unit</label>
+        <select id="f-ru">
+          <option value="">Semua RU</option>
+          <option>RU II Dumai</option>
+          <option>RU III Plaju</option>
+          <option>RU IV Cilacap</option>
+          <option>RU V Balikpapan</option>
+          <option>RU VI Balongan</option>
+          <option>RU VII Kasim</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tag Number</label>
+        <input type="text" id="f-tag" placeholder="contoh: 4B-P-001"/>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Contoh Pertanyaan</div>
+      <div class="suggestions">
+        <div class="sug-group-label">📄 Dokumen</div>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Apa prosedur overhaul pompa sentrifugal?</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">SOP penanganan vibrasi tinggi</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Batas alarm temperatur kompresor</button>
+
+        <div class="sug-group-label" style="margin-top:10px">📊 Data</div>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Berapa notifikasi overdue di RU IV?</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Equipment apa yang masuk bad actor aktif?</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">List zero clamp yang masih aktif</button>
+
+        <div class="sug-group-label" style="margin-top:10px">🔍 Analisa</div>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Equipment mana yang paling banyak WO overdue?</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Ringkasan kondisi ICU critical bulan ini</button>
+        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Dokumen apa yang terkait tag 4B-P-001?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Area chat utama -->
+  <div class="chat-main">
+    <div class="chat-messages" id="chat-messages">
+      <!-- Welcome message -->
+      <div class="chat-welcome">
+        <div class="welcome-icon">🤖</div>
+        <div class="welcome-title">AI Assistant Pertamina</div>
+        <div class="welcome-desc">Saya bisa menjawab pertanyaan tentang dokumen, data equipment, monitoring, dan analisa kondisi aset. Tanya apa saja!</div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="chat-input-wrap">
+        <textarea id="chat-input" placeholder="Ketik pertanyaan... (Enter untuk kirim, Shift+Enter untuk baris baru)"
+                  rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="chat-send-btn" id="send-btn" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div class="chat-input-meta">
+        <span id="intent-indicator" class="intent-badge hidden"></span>
+        <span style="font-size:11px;color:var(--text3);margin-left:auto">Powered by GPT-4o · Data Governance Pertamina</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let history = [];
+let isLoading = false;
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function setSuggestion(text) {
+  const input = document.getElementById('chat-input');
+  input.value = text;
+  autoResize(input);
+  input.focus();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message || isLoading) return;
+
+  isLoading = true;
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  // Tambah bubble user
+  appendBubble('user', message);
+
+  // Tambah loading bubble
+  const loadingId = appendLoading();
+
+  const filters = {
+    ru: document.getElementById('f-ru').value || null,
+    tag_number: document.getElementById('f-tag').value.trim() || null
+  };
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ message, history, filters })
+    });
+    const data = await res.json();
+
+    removeLoading(loadingId);
+    appendAssistantBubble(data);
+
+    // Update history
+    history.push({role: 'user', content: message});
+    history.push({role: 'assistant', content: data.answer});
+    if (history.length > 20) history = history.slice(-20);
+
+    // Show intent
+    showIntent(data.intent);
+
+  } catch(err) {
+    removeLoading(loadingId);
+    appendBubble('assistant', 'Terjadi error: ' + err.message);
+  } finally {
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+  }
+}
+
+function appendBubble(role, content) {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `chat-bubble bubble-${role}`;
+  div.innerHTML = `<div class="bubble-content">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
+  container.appendChild(div);
+  scrollToBottom();
+}
+
+function appendAssistantBubble(data) {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble bubble-assistant';
+
+  let html = `<div class="bubble-content">${formatAnswer(data.answer)}</div>`;
+
+  // Sources (RAG)
+  if (data.sources && data.sources.length > 0) {
+    html += `<div class="bubble-sources">
+      <div class="sources-title">📄 Sumber Dokumen</div>
+      ${data.sources.map(s => `
+        <a href="/document/${s.doc_id}" class="source-item" target="_blank">
+          <span class="source-name">${escapeHtml(s.judul)}</span>
+          ${s.ru ? `<span class="source-badge">${s.ru}</span>` : ''}
+          ${s.halaman ? `<span class="source-badge">Hal. ${s.halaman}</span>` : ''}
+          <span class="source-score">${Math.round(s.score*100)}%</span>
+        </a>
+      `).join('')}
+    </div>`;
+  }
+
+  // SQL
+  if (data.sql) {
+    html += `<details class="bubble-sql">
+      <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
+      <pre class="sql-code">${escapeHtml(data.sql)}</pre>
+    </details>`;
+  }
+
+  // Cypher
+  if (data.cypher) {
+    html += `<details class="bubble-sql">
+      <summary>🔗 Cypher Query</summary>
+      <pre class="sql-code">${escapeHtml(data.cypher)}</pre>
+    </details>`;
+  }
+
+  div.innerHTML = html;
+  container.appendChild(div);
+  scrollToBottom();
+}
+
+function appendLoading() {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  const id = 'loading-' + Date.now();
+  div.id = id;
+  div.className = 'chat-bubble bubble-assistant';
+  div.innerHTML = `<div class="bubble-content loading-dots"><span></span><span></span><span></span></div>`;
+  container.appendChild(div);
+  scrollToBottom();
+  return id;
+}
+
+function removeLoading(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function showIntent(intent) {
+  const badge = document.getElementById('intent-indicator');
+  const labels = {
+    rag: '📄 RAG Dokumen',
+    sql: '🗄️ Query Database',
+    graph: '🔗 Knowledge Graph',
+    hybrid: '⚡ Hybrid',
+    general: '💬 General'
+  };
+  badge.textContent = labels[intent] || intent;
+  badge.className = `intent-badge intent-${intent}`;
+  setTimeout(() => badge.classList.add('hidden'), 4000);
+}
+
+function formatAnswer(text) {
+  return escapeHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '• $1')
+    .replace(/\n/g, '<br>');
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function scrollToBottom() {
+  const c = document.getElementById('chat-messages');
+  c.scrollTop = c.scrollHeight;
+}
+
+// Auto-focus
+document.getElementById('chat-input').focus();
+</script>
+{% endblock %}

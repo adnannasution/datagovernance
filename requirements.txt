@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+psycopg[binary]
+pgvector
+openai
+pdfplumber
+PyMuPDF
+python-docx
+openpyxl
+pandas
+python-pptx
+python-multipart
+jinja2
+python-dotenv
+aiofiles
+neo4j>=5.0.0

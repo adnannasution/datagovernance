@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+  <a href="/catalog" style="color:var(--text3);font-size:13px;text-decoration:none">← Catalog</a>
+  <span style="color:var(--border2)">/</span>
+  <span style="font-size:13px;color:var(--text2)">{{ tbl.domain }}</span>
+  <span style="color:var(--border2)">/</span>
+  <span style="font-size:13px">{{ tbl.label }}</span>
+</div>
+
+<div class="grid-4 mb-lg">
+  <div class="stat-card">
+    <div class="stat-label">Total Rows</div>
+    <div class="stat-value">{{ "{:,}".format(quality.total_rows or 0) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Kolom</div>
+    <div class="stat-value">{{ quality.total_cols or 0 }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Avg Completeness</div>
+    <div class="stat-value" style="color:{% if quality.avg_completeness >= 90 %}var(--success){% elif quality.avg_completeness >= 70 %}var(--warning){% else %}var(--danger){% endif %}">
+      {{ quality.avg_completeness or 0 }}%
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Tag Coverage</div>
+    <div class="stat-value">
+      {% if quality.tag_coverage %}{{ quality.tag_coverage.coverage_pct }}%{% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid-2 mb-lg">
+  <div class="card">
+    <div class="card-title">Info Tabel</div>
+    <div class="info-row"><span class="info-label">Nama tabel</span><code>{{ tbl.table }}</code></div>
+    <div class="info-row"><span class="info-label">Domain</span><span class="badge badge-tipe">{{ tbl.domain }}</span></div>
+    <div class="info-row"><span class="info-label">Kolom tag</span><code>{{ tbl.tag_col or '—' }}</code></div>
+    {% if quality.tag_coverage %}
+    <div class="info-row"><span class="info-label">Unique tags</span><span>{{ quality.tag_coverage.unique_tags }}</span></div>
+    <div class="info-row"><span class="info-label">Tanpa tag</span><span>{{ quality.tag_coverage.no_tag }}</span></div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="card-title">Kualitas Data per Kolom</div>
+    <div style="max-height:200px;overflow-y:auto">
+      {% for c in quality.null_stats %}
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:0.5px solid var(--border)">
+        <span style="font-size:11px;min-width:130px;color:var(--text2)">{{ c.column }}</span>
+        <div class="bar-track" style="flex:1;height:5px">
+          <div class="bar-fill" style="width:{{ c.completeness }}%;background:{% if c.completeness >= 90 %}var(--success){% elif c.completeness >= 70 %}#eab308{% else %}var(--danger){% endif %}"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text3);min-width:36px;text-align:right">{{ c.completeness }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <div class="card-title" style="margin:0">Data Browser</div>
+    <form method="get" style="display:flex;gap:8px">
+      <input type="text" name="search" value="{{ search }}" placeholder="Cari..." style="width:220px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px"/>
+      <button type="submit" class="btn btn-primary">Cari</button>
+      {% if search %}<a href="/catalog/{{ tbl.table }}" class="btn">Reset</a>{% endif %}
+    </form>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="data-table" style="min-width:max-content">
+      <thead>
+        <tr>
+          {% for col in cols %}
+          <th style="white-space:nowrap">{{ col.column_name }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% for col in cols %}
+          <td style="white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px">
+            {{ row[col.column_name] if row[col.column_name] is not none else '—' }}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ cols|length }}" class="empty-text">Tidak ada data</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="pagination mt-lg">
+    {% if page > 1 %}
+    <a href="?page={{ page-1 }}&search={{ search }}" class="btn btn-secondary">← Prev</a>
+    {% endif %}
+    <span class="page-info">Halaman {{ page }} dari {{ total_pages }} ({{ "{:,}".format(total) }} rows)</span>
+    {% if page < total_pages %}
+    <a href="?page={{ page+1 }}&search={{ search }}" class="btn btn-secondary">Next →</a>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="pagination"><span class="page-info">{{ "{:,}".format(total) }} rows</span></div>
+  {% endif %}
+</div>
+{% endblock %}

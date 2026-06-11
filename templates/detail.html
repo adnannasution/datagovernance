@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="detail-page">
+  <div class="detail-header">
+    <div>
+      <div class="detail-badges">
+        <span class="badge badge-tipe">{{ doc.tipe_dokumen }}</span>
+        {% if doc.ru %}<span class="badge badge-ru">{{ doc.ru }}</span>{% endif %}
+        <span class="badge badge-{{ doc.status }}">{{ doc.status }}</span>
+      </div>
+      <h2 class="detail-title">{{ doc.judul }}</h2>
+      {% if doc.deskripsi %}<p class="detail-desc">{{ doc.deskripsi }}</p>{% endif %}
+    </div>
+    <div class="detail-actions">
+      <a href="/api/document/{{ doc.id }}/download" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+    </div>
+  </div>
+
+  <div class="grid-2 mt-lg">
+    <div class="card">
+      <div class="card-title">Informasi Dokumen</div>
+      <div class="info-row"><span class="info-label">Nomor Dokumen</span><span>{{ doc.nomor_dokumen or '—' }}</span></div>
+      <div class="info-row"><span class="info-label">File</span><span>{{ doc.file_name }}</span></div>
+      <div class="info-row"><span class="info-label">Ukuran</span><span>{{ "%.1f"|format(doc.file_size_bytes / 1024 / 1024) }} MB</span></div>
+      <div class="info-row"><span class="info-label">Total Halaman</span><span>{{ doc.total_pages or '—' }}</span></div>
+      <div class="info-row"><span class="info-label">Total Chunks</span><span>{{ doc.total_chunks or '—' }}</span></div>
+      <div class="info-row"><span class="info-label">Diupload</span><span>{{ doc.uploaded_at.strftime('%d %b %Y %H:%M') if doc.uploaded_at else '—' }}</span></div>
+      {% if doc.error_message %}
+      <div class="info-row error-row"><span class="info-label">Error</span><span>{{ doc.error_message }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Tag Number Terkait</div>
+      <div id="tag-list">
+        {% for tag in tags %}
+        <div class="tag-row">
+          <span class="tag-pill-lg">{{ tag.tag_number }}</span>
+          <span class="tag-type">{{ tag.link_type }}</span>
+          <button class="btn-icon danger" onclick="removeTag('{{ tag.tag_number }}')">✕</button>
+        </div>
+        {% else %}
+        <p class="empty-text">Belum ada tag terhubung</p>
+        {% endfor %}
+      </div>
+      <div class="add-tag-row mt-sm">
+        <input type="text" id="new-tag" placeholder="Tambah tag number..." style="flex:1"/>
+        <button class="btn btn-primary" onclick="addTag()">Tambah</button>
+      </div>
+    </div>
+  </div>
+
+  {% if chunks %}
+  <div class="card mt-lg">
+    <div class="card-title">Preview Chunks (5 pertama)</div>
+    {% for chunk in chunks %}
+    <div class="chunk-preview">
+      <div class="chunk-meta-bar">
+        <span>Chunk {{ chunk.chunk_index }}</span>
+        {% if chunk.halaman %}<span>Halaman {{ chunk.halaman }}</span>{% endif %}
+        {% if chunk.slide_title %}<span>{{ chunk.slide_title }}</span>{% endif %}
+        {% if chunk.sheet_name %}<span>Sheet: {{ chunk.sheet_name }}</span>{% endif %}
+      </div>
+      <div class="chunk-content">{{ chunk.content_preview }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if versions %}
+  <div class="card mt-lg">
+    <div class="card-title">Riwayat Versi</div>
+    {% for v in versions %}
+    <div class="info-row">
+      <span class="info-label">v{{ v.version_number }}</span>
+      <span>{{ v.file_name }}</span>
+      <span class="text-muted">{{ v.created_at.strftime('%d %b %Y') if v.created_at else '' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const docId = {{ doc.id }};
+
+async function addTag() {
+  const input = document.getElementById('new-tag');
+  const tag = input.value.trim().toUpperCase();
+  if (!tag) return;
+  const fd = new FormData();
+  fd.append('tag_number', tag);
+  const res = await fetch(`/api/document/${docId}/tags`, { method: 'POST', body: fd });
+  if (res.ok) { input.value = ''; location.reload(); }
+  else alert('Gagal menambah tag');
+}
+
+async function removeTag(tag) {
+  if (!confirm(`Hapus tag ${tag}?`)) return;
+  const res = await fetch(`/api/document/${docId}/tags/${tag}`, { method: 'DELETE' });
+  if (res.ok) location.reload();
+  else alert('Gagal menghapus tag');
+}
+
+document.getElementById('new-tag').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addTag();
+});
+</script>
+{% endblock %}

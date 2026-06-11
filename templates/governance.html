@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid-4 mb-lg">
+  <div class="stat-card">
+    <div class="stat-label">Total Tabel</div>
+    <div class="stat-value">{{ overview.total_tables }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Rows</div>
+    <div class="stat-value">{{ "{:,}".format(overview.total_rows) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Equipment</div>
+    <div class="stat-value">{{ "{:,}".format(overview.total_equipment) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Domain Data</div>
+    <div class="stat-value">{{ overview.by_domain|length }}</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Rows per Domain</div>
+    {% for d in overview.by_domain %}
+    <div class="bar-row">
+      <span class="bar-label">{{ d.domain }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:{{ [d.rows * 100 // (overview.total_rows or 1), 100]|min }}%"></div>
+      </div>
+      <span class="bar-count">{{ "{:,}".format(d.rows) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">Status Tabel</div>
+    {% for d in overview.by_domain %}
+    <div class="bar-row">
+      <span class="bar-label">{{ d.domain }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:{{ [d.tables * 100 // (overview.total_tables or 1), 100]|min }}%; background: var(--success)"></div>
+      </div>
+      <span class="bar-count">{{ d.tables }} tabel</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title">Semua Tabel</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Tabel</th>
+        <th>Domain</th>
+        <th>Kolom Tag</th>
+        <th>Total Rows</th>
+        <th>Ukuran</th>
+        <th>Kolom</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in overview.tables %}
+      <tr>
+        <td class="doc-title">
+          <a href="/catalog/{{ t.table }}" style="color:var(--accent);text-decoration:none">{{ t.label }}</a>
+          <div style="font-size:11px;color:var(--text3)">{{ t.table }}</div>
+        </td>
+        <td><span class="badge badge-tipe">{{ t.domain }}</span></td>
+        <td style="font-size:12px;color:var(--text2)">{{ t.tag_col or '—' }}</td>
+        <td>{{ "{:,}".format(t.total_rows) }}</td>
+        <td style="color:var(--text3)">{{ t.ukuran }}</td>
+        <td style="color:var(--text3)">{{ t.total_cols }}</td>
+        <td>
+          {% if t.exists %}
+          <a href="/catalog/{{ t.table }}" class="btn" style="font-size:11px;padding:3px 8px">Browse</a>
+          {% else %}
+          <span class="badge badge-error">not found</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

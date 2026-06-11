@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="search-page">
+  <div class="search-box-wrap">
+    <div class="search-main">
+      <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="query" class="search-main-input"
+             placeholder="Tanya apa saja... contoh: prosedur overhaul pompa sentrifugal"/>
+      <button class="btn btn-primary" id="search-btn" onclick="doSearch()">Cari</button>
+    </div>
+    <div class="search-filters">
+      <select id="f-ru">
+        <option value="">Semua RU</option>
+        {% for r in ru_list %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+      <select id="f-tipe">
+        <option value="">Semua Tipe</option>
+        {% for t in tipe_list %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" id="f-tag" placeholder="Filter tag number..." style="width:180px"/>
+    </div>
+  </div>
+
+  <div class="example-queries">
+    <span class="eq-label">Contoh:</span>
+    {% set examples = [
+      "prosedur overhaul pompa sentrifugal",
+      "batas alarm vibrasi rotating equipment",
+      "temuan inspeksi kompresor",
+      "maintenance record turbin gas",
+      "SOP penanganan kebocoran"
+    ] %}
+    {% for q in examples %}
+    <button class="eq-btn" onclick="setQuery('{{ q }}')">{{ q }}</button>
+    {% endfor %}
+  </div>
+
+  <div id="search-status" class="search-status hidden"></div>
+
+  <div id="results-container"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('query').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+function setQuery(q) {
+  document.getElementById('query').value = q;
+  doSearch();
+}
+
+async function doSearch() {
+  const query = document.getElementById('query').value.trim();
+  if (!query) return;
+
+  const btn = document.getElementById('search-btn');
+  btn.disabled = true;
+  btn.textContent = 'Mencari...';
+
+  const status = document.getElementById('search-status');
+  status.classList.remove('hidden');
+  status.textContent = 'Mengambil embedding dan mencari dokumen relevan...';
+
+  document.getElementById('results-container').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        ru: document.getElementById('f-ru').value || null,
+        tipe: document.getElementById('f-tipe').value || null,
+        tag_number: document.getElementById('f-tag').value.trim() || null,
+        limit: 10,
+        threshold: 0.35
+      })
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || 'Search gagal');
+
+    status.textContent = `${data.total} hasil ditemukan untuk "${data.query}"`;
+
+    if (data.results.length === 0) {
+      document.getElementById('results-container').innerHTML =
+        '<div class="empty-search">Tidak ada hasil yang relevan. Coba ubah kata kunci atau turunkan threshold.</div>';
+      return;
+    }
+
+    document.getElementById('results-container').innerHTML = data.results.map((r, i) => {
+      const score = Math.round(r.score * 100);
+      const loc = r.halaman ? `Halaman ${r.halaman}` :
+                  r.slide_number ? `Slide ${r.slide_number}` :
+                  r.sheet_name ? `Sheet: ${r.sheet_name}` : '';
+      const locLabel = r.slide_title ? `Slide ${r.slide_number}: ${r.slide_title}` : loc;
+      return `
+      <div class="result-card">
+        <div class="result-meta">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <a href="/document/${r.doc_id}" class="result-doc-link">${r.judul}</a>
+          ${r.ru ? `<span class="badge badge-ru">${r.ru}</span>` : ''}
+          <span class="badge badge-tipe">${r.tipe_dokumen}</span>
+          ${locLabel ? `<span class="result-loc">${locLabel}</span>` : ''}
+        </div>
+        <div class="result-content">${highlight(r.content, query)}</div>
+        <div class="result-score-row">
+          <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
+          <span class="score-label">${score}% relevan</span>
+        </div>
+      </div>`;
+    }).join('');
+
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Cari';
+  }
+}
+
+function highlight(text, query) {
+  const words = query.split(/\s+/).filter(w => w.length > 2);
+  let result = text.substring(0, 400) + (text.length > 400 ? '...' : '');
+  words.forEach(w => {
+    const re = new RegExp(`(${w})`, 'gi');
+    result = result.replace(re, '<mark>$1</mark>');
+  });
+  return result;
+}
+</script>
+{% endblock %}

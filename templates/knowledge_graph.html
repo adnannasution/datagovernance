@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if not stats.connected %}
+<div style="padding:1rem;background:var(--danger-bg);color:var(--danger);border-radius:var(--radius);margin-bottom:1rem;font-size:13px">
+  ⚠ Neo4j tidak dapat diakses — {{ stats.error or 'Connection error' }}. Periksa NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD di environment variables.
+</div>
+{% endif %}
+
+<div class="grid-4 mb-lg">
+  <div class="stat-card">
+    <div class="stat-label">Status</div>
+    <div class="stat-value" style="font-size:16px;color:{% if stats.connected %}var(--success){% else %}var(--danger){% endif %}">
+      {% if stats.connected %}Connected{% else %}Offline{% endif %}
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Doc → Equipment</div>
+    <div class="stat-value">{{ stats.doc_relations or 0 }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Relasi</div>
+    <div class="stat-value">{{ "{:,}".format(stats.total_relations or 0) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Node Labels</div>
+    <div class="stat-value">{{ stats.labels|length if stats.labels else 0 }}</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Nodes per Label</div>
+    {% if stats.labels %}
+    {% for lbl in stats.labels %}
+    <div class="bar-row">
+      <span class="bar-label">{{ lbl.label }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:{{ [lbl.count * 100 // ([stats.labels[0].count, 1]|max), 100]|min }}%"></div>
+      </div>
+      <span class="bar-count">{{ "{:,}".format(lbl.count) }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty-text">Tidak ada data</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">Dokumen Terbaru di Graph</div>
+    {% if stats.recent_docs %}
+    {% for doc in stats.recent_docs %}
+    <div class="activity-row">
+      <div class="activity-info">
+        <a href="/document/{{ doc.doc_id }}" class="activity-title" style="color:var(--accent);text-decoration:none">{{ doc.judul }}</a>
+        <div class="activity-meta">{{ doc.ru or '' }} {% if doc.ru %}·{% endif %} {{ doc.tipe or '' }}</div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="empty-text">Belum ada dokumen di graph</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title">Sync Management</div>
+  <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+    <div>
+      <div style="font-size:13px;margin-bottom:4px">Full Sync — sync semua dokumen dari PostgreSQL ke Neo4j</div>
+      <div style="font-size:12px;color:var(--text3)">Dokumen yang sudah ada akan di-update, yang belum akan dibuat baru</div>
+    </div>
+    <button class="btn btn-primary" id="sync-btn" onclick="startSync()" {% if not stats.connected %}disabled{% endif %}>
+      Jalankan Full Sync
+    </button>
+  </div>
+
+  <div id="sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
+    <div id="sync-msg" style="font-size:13px;margin-bottom:8px">Sync berjalan...</div>
+    <div class="progress-bar"><div class="progress-fill" id="sync-progress" style="width:0%"></div></div>
+  </div>
+
+  <div id="sync-result" class="hidden" style="margin-top:1rem"></div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title">Cypher Query Explorer</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Contoh query yang bisa dijalankan di Neo4j Browser</div>
+
+  {% set examples = [
+    ("Semua dokumen terkait satu equipment", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment {tag_number: '4B-P-001'})\nRETURN d.judul, d.tipe, d.ru"),
+    ("Equipment dengan dokumen terbanyak", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nRETURN e.tag_number, count(d) as total_docs\nORDER BY total_docs DESC LIMIT 10"),
+    ("Dokumen SOP yang terkait equipment tertentu", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nWHERE d.tipe = 'SOP'\nRETURN d.judul, e.tag_number, e.description"),
+    ("Equipment tanpa dokumen (knowledge gap)", "MATCH (e:Equipment)\nWHERE NOT (e)<-[:TERKAIT_DENGAN]-()\nRETURN e.tag_number, e.description LIMIT 20")
+  ] %}
+
+  {% for label, query in examples %}
+  <div style="margin-bottom:12px;padding:12px;background:var(--surface2);border-radius:var(--radius)">
+    <div style="font-size:12px;font-weight:500;margin-bottom:6px">{{ label }}</div>
+    <pre style="font-size:11px;color:var(--text2);font-family:monospace;white-space:pre-wrap;margin:0">{{ query }}</pre>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let syncInterval = null;
+
+async function startSync() {
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sync berjalan...';
+
+  document.getElementById('sync-status').classList.remove('hidden');
+  document.getElementById('sync-result').classList.add('hidden');
+  document.getElementById('sync-progress').style.width = '10%';
+  document.getElementById('sync-msg').textContent = 'Memulai sync...';
+
+  try {
+    const res = await fetch('/api/neo4j/sync', { method: 'POST' });
+    if (!res.ok) throw new Error('Gagal memulai sync');
+
+    // Poll status
+    let pct = 10;
+    syncInterval = setInterval(async () => {
+      try {
+        const sr = await fetch('/api/neo4j/sync/status');
+        const sd = await sr.json();
+
+        pct = Math.min(pct + 5, 90);
+        document.getElementById('sync-progress').style.width = pct + '%';
+
+        if (!sd.running && sd.last_result) {
+          clearInterval(syncInterval);
+          document.getElementById('sync-progress').style.width = '100%';
+          showResult(sd.last_result);
+          btn.disabled = false;
+          btn.textContent = 'Jalankan Full Sync';
+        }
+      } catch(e) {}
+    }, 2000);
+
+  } catch(err) {
+    document.getElementById('sync-msg').textContent = 'Error: ' + err.message;
+    btn.disabled = false;
+    btn.textContent = 'Jalankan Full Sync';
+  }
+}
+
+function showResult(r) {
+  const container = document.getElementById('sync-result');
+  container.classList.remove('hidden');
+  const color = r.success ? 'var(--success-bg)' : 'var(--danger-bg)';
+  const textColor = r.success ? 'var(--success)' : 'var(--danger)';
+  container.innerHTML = `
+    <div style="padding:1rem;background:${color};border-radius:var(--radius);color:${textColor}">
+      <div style="font-weight:500;margin-bottom:6px">${r.success ? '✓ Sync selesai' : '✗ Sync gagal'}</div>
+      <div style="font-size:13px;display:flex;gap:1.5rem;flex-wrap:wrap">
+        <span>Total: <strong>${r.total}</strong></span>
+        <span>Berhasil: <strong>${r.synced}</strong></span>
+        <span>Gagal: <strong>${r.failed}</strong></span>
+      </div>
+      ${r.errors && r.errors.length > 0 ? `
+        <div style="margin-top:8px;font-size:12px;opacity:0.8">
+          ${r.errors.slice(0,3).join('<br>')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+  document.getElementById('sync-msg').textContent = 'Sync selesai';
+}
+</script>
+{% endblock %}

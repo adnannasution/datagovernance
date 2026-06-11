@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid-4 mb-lg">
+  <div class="stat-card">
+    <div class="stat-label">Total Dokumen</div>
+    <div class="stat-value">{{ stats.total_docs }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Upload Hari Ini</div>
+    <div class="stat-value">{{ stats.today_uploads }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Chunks</div>
+    <div class="stat-value">{{ stats.total_chunks }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Tag Terhubung</div>
+    <div class="stat-value">{{ stats.total_tags }}</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Dokumen per RU</div>
+    {% for row in stats.by_ru %}
+    <div class="bar-row">
+      <span class="bar-label">{{ row.ru or 'Belum diset' }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:{{ [row.n * 100 // (stats.total_docs or 1), 100]|min }}%"></div>
+      </div>
+      <span class="bar-count">{{ row.n }}</span>
+    </div>
+    {% else %}
+    <p class="empty-text">Belum ada data</p>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <div class="card-title">Tipe Dokumen</div>
+    {% for row in stats.by_tipe %}
+    <div class="bar-row">
+      <span class="bar-label">{{ row.tipe_dokumen }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:{{ [row.n * 100 // (stats.total_docs or 1), 100]|min }}%"></div>
+      </div>
+      <span class="bar-count">{{ row.n }}</span>
+    </div>
+    {% else %}
+    <p class="empty-text">Belum ada data</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card mt-lg">
+  <div class="card-title">Aktivitas Terbaru</div>
+  {% for doc in stats.recent %}
+  <a href="/document/{{ doc.id }}" class="activity-row">
+    <div class="activity-icon">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </div>
+    <div class="activity-info">
+      <div class="activity-title">{{ doc.judul }}</div>
+      <div class="activity-meta">{{ doc.ru or '' }} {% if doc.ru and doc.tipe_dokumen %}·{% endif %} {{ doc.tipe_dokumen }}</div>
+    </div>
+    <span class="badge badge-{{ doc.status }}">{{ doc.status }}</span>
+  </a>
+  {% else %}
+  <p class="empty-text">Belum ada aktivitas</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" class="filter-bar">
+  <input type="text" name="search" value="{{ filters.search }}" placeholder="Cari judul atau nomor dokumen..."/>
+  <select name="ru">
+    <option value="">Semua RU</option>
+    {% for r in ru_list %}
+    <option value="{{ r }}" {% if filters.ru == r %}selected{% endif %}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <select name="tipe">
+    <option value="">Semua Tipe</option>
+    {% for t in tipe_list %}
+    <option value="{{ t }}" {% if filters.tipe == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="status">
+    <option value="">Semua Status</option>
+    <option value="ready" {% if filters.status == 'ready' %}selected{% endif %}>Ready</option>
+    <option value="processing" {% if filters.status == 'processing' %}selected{% endif %}>Processing</option>
+    <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
+    <option value="error" {% if filters.status == 'error' %}selected{% endif %}>Error</option>
+  </select>
+  <button type="submit" class="btn btn-primary">Filter</button>
+  <a href="/library" class="btn btn-secondary">Reset</a>
+  <a href="/upload" class="btn btn-primary ml-auto">+ Upload</a>
+</form>
+
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Judul</th>
+        <th>Tipe</th>
+        <th>RU</th>
+        <th>Tag Terkait</th>
+        <th>Chunks</th>
+        <th>Status</th>
+        <th>Upload</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for doc in docs %}
+      <tr onclick="window.location='/document/{{ doc.id }}'" style="cursor:pointer">
+        <td class="doc-title">{{ doc.judul }}</td>
+        <td><span class="badge badge-tipe">{{ doc.tipe_dokumen }}</span></td>
+        <td><span class="badge badge-ru">{{ doc.ru or '—' }}</span></td>
+        <td class="tag-count">{{ doc.total_tags }} tag</td>
+        <td>{{ doc.total_chunks or '—' }}</td>
+        <td><span class="badge badge-{{ doc.status }}">{{ doc.status }}</span></td>
+        <td class="date-col">{{ doc.uploaded_at.strftime('%d %b %Y') if doc.uploaded_at else '—' }}</td>
+        <td onclick="event.stopPropagation()">
+          <button class="btn-icon danger" onclick="deleteDoc({{ doc.id }}, '{{ doc.judul }}')">✕</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty-text">Tidak ada dokumen ditemukan</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&ru={{ filters.ru }}&tipe={{ filters.tipe }}&status={{ filters.status }}&search={{ filters.search }}" class="btn btn-secondary">← Prev</a>
+  {% endif %}
+  <span class="page-info">Halaman {{ page }} dari {{ total_pages }} ({{ total }} dokumen)</span>
+  {% if page < total_pages %}
+  <a href="?page={{ page + 1 }}&ru={{ filters.ru }}&tipe={{ filters.tipe }}&status={{ filters.status }}&search={{ filters.search }}" class="btn btn-secondary">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="pagination">
+  <span class="page-info">{{ total }} dokumen</span>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteDoc(id, judul) {
+  if (!confirm(`Hapus dokumen "${judul}"?\nSemua chunks dan tag links akan ikut terhapus.`)) return;
+  const res = await fetch(`/api/document/${id}`, { method: 'DELETE' });
+  if (res.ok) location.reload();
+  else alert('Gagal menghapus dokumen');
+}
+</script>
+{% endblock %}

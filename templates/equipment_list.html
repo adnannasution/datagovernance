@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" class="filter-bar mb-lg">
+  <input type="text" name="q" value="{{ q }}" placeholder="Cari tag number, deskripsi, functional location..."/>
+  <select name="plant">
+    <option value="">Semua Plant</option>
+    {% for p in plants %}
+    <option value="{{ p }}" {% if plant == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary">Cari</button>
+  {% if q or plant %}<a href="/equipment" class="btn">Reset</a>{% endif %}
+</form>
+
+{% if equipment %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Tag Number</th>
+        <th>Deskripsi</th>
+        <th>Functional Location</th>
+        <th>Plant</th>
+        <th>Criticality</th>
+        <th>Kategori</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for eq in equipment %}
+      <tr onclick="window.location='/equipment/{{ eq.equipment }}'" style="cursor:pointer">
+        <td style="font-weight:500;font-family:monospace;font-size:12px">{{ eq.equipment }}</td>
+        <td class="doc-title">{{ eq.description or '—' }}</td>
+        <td style="font-size:12px;color:var(--text2)">{{ eq.functional_location or '—' }}</td>
+        <td><span class="badge badge-ru">{{ eq.maintenance_plant or '—' }}</span></td>
+        <td>
+          {% if eq.criticality %}
+          <span class="badge {% if eq.criticality == 'A' %}badge-error{% elif eq.criticality == 'B' %}badge-pending{% else %}badge-ready{% endif %}">
+            {{ eq.criticality }}
+          </span>
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:12px;color:var(--text3)">{{ eq.equipment_category or '—' }}</td>
+        <td>
+          <a href="/equipment/{{ eq.equipment }}" class="btn" style="font-size:11px;padding:3px 8px">360°</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif q or plant %}
+<div class="card">
+  <p class="empty-text">Tidak ada equipment ditemukan</p>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem">
+  <div style="font-size:32px;margin-bottom:12px">🔍</div>
+  <div style="font-size:15px;font-weight:500;margin-bottom:6px">Cari Equipment</div>
+  <div style="font-size:13px;color:var(--text2)">Ketik tag number, deskripsi, atau pilih plant di atas</div>
+</div>
+{% endif %}
+{% endblock %}

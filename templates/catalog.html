@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="filter-bar mb-lg">
+  <a href="/catalog" class="btn {% if not active_domain %}btn-primary{% endif %}">Semua</a>
+  {% for d in domain_list %}
+  <a href="/catalog?domain={{ d }}" class="btn {% if active_domain == d %}btn-primary{% endif %}">{{ d }}</a>
+  {% endfor %}
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+  {% for t in stats %}
+  <a href="/catalog/{{ t.table }}" style="text-decoration:none">
+    <div class="card catalog-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:14px;font-weight:500;color:var(--text)">{{ t.label }}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">{{ t.table }}</div>
+        </div>
+        <span class="badge badge-tipe">{{ t.domain }}</span>
+      </div>
+      <div style="display:flex;gap:16px;font-size:12px;color:var(--text2)">
+        <div><span style="font-weight:500;color:var(--text)">{{ "{:,}".format(t.total_rows) }}</span> rows</div>
+        <div><span style="font-weight:500;color:var(--text)">{{ t.total_cols }}</span> kolom</div>
+        <div style="color:var(--text3)">{{ t.ukuran }}</div>
+      </div>
+      {% if t.tag_col %}
+      <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+        Tag: <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">{{ t.tag_col }}</code>
+      </div>
+      {% endif %}
+      {% if not t.exists %}
+      <div style="margin-top:6px"><span class="badge badge-error">tabel tidak ditemukan</span></div>
+      {% endif %}
+    </div>
+  </a>
+  {% else %}
+  <p class="empty-text">Tidak ada tabel di domain ini</p>
+  {% endfor %}
+</div>
+{% endblock %}
