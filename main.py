@@ -579,15 +579,18 @@ from tag_resolver import generate_candidates
 
 _mapping_running = False
 _last_mapping_result = None
+_mapping_current_table = None
 
 
-def _run_generate_candidates():
-    global _mapping_running, _last_mapping_result
+def _run_generate_candidates(source_table: str = None):
+    global _mapping_running, _last_mapping_result, _mapping_current_table
     _mapping_running = True
+    _mapping_current_table = source_table or "all"
     try:
-        _last_mapping_result = generate_candidates()
+        _last_mapping_result = generate_candidates(source_table=source_table)
     finally:
         _mapping_running = False
+        _mapping_current_table = None
 
 
 @app.get("/tag-mapping", response_class=HTMLResponse)
@@ -623,17 +626,22 @@ async def page_tag_mapping(
 
 
 @app.post("/api/tag-mapping/generate")
-async def api_generate_mappings(background_tasks: BackgroundTasks):
+async def api_generate_mappings(background_tasks: BackgroundTasks, source_table: str = None):
     global _mapping_running
     if _mapping_running:
-        return {"message": "Generate sudah berjalan"}
-    background_tasks.add_task(_run_generate_candidates)
-    return {"message": "Generate kandidat dimulai di background"}
+        return {"message": "Generate sudah berjalan", "running": True}
+    background_tasks.add_task(_run_generate_candidates, source_table)
+    msg = f"Generate kandidat untuk tabel '{source_table}' dimulai" if source_table else "Generate semua tabel dimulai"
+    return {"message": msg, "running": True}
 
 
 @app.get("/api/tag-mapping/status")
 async def api_mapping_status():
-    return {"running": _mapping_running, "last_result": _last_mapping_result}
+    return {
+        "running": _mapping_running,
+        "current_table": _mapping_current_table,
+        "last_result": _last_mapping_result,
+    }
 
 
 @app.post("/api/tag-mapping/{mapping_id}/approve")

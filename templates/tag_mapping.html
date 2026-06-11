@@ -25,10 +25,22 @@
 <div class="card" style="margin-bottom:1.25rem">
   <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
     <button id="btn-generate" class="btn btn-primary" onclick="generateKandidats()">
-      ⚙ Generate Kandidat
+      ⚙ Generate Semua Tabel
+    </button>
+    <select id="select-table" style="padding:.45rem .75rem;border-radius:6px;border:1px solid var(--border);font-size:.85rem;background:var(--bg-card)">
+      <option value="">— Pilih tabel spesifik —</option>
+      {% for t in table_list %}
+      <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-secondary" onclick="generateKandidats(document.getElementById('select-table').value || null)" style="font-size:.85rem">
+      ⚙ Generate Tabel Ini
     </button>
     <span id="generate-status" style="font-size:.85rem;color:var(--text-muted)"></span>
   </div>
+  <p style="font-size:.8rem;color:var(--text-muted);margin-top:.5rem;margin-bottom:0">
+    Generate per tabel lebih cepat. Pilih tabel spesifik untuk proses satu tabel saja.
+  </p>
   <div id="generate-progress" style="display:none;margin-top:.75rem">
     <div class="progress-bar">
       <div id="progress-bar" class="progress-fill" style="width:0%"></div>
@@ -218,7 +230,7 @@
 {% block scripts %}
 <script>
 // ── Generate kandidat ──────────────────────────────────────────────
-async function generateKandidats() {
+async function generateKandidats(sourceTable) {
   const btn = document.getElementById('btn-generate');
   const status = document.getElementById('generate-status');
   const progress = document.getElementById('generate-progress');
@@ -226,14 +238,18 @@ async function generateKandidats() {
 
   btn.disabled = true;
   btn.textContent = '⏳ Berjalan...';
-  status.textContent = 'Memulai generate kandidat...';
+  const label = sourceTable ? `tabel '${sourceTable}'` : 'semua tabel';
+  status.textContent = `Memulai generate kandidat untuk ${label}...`;
   progress.style.display = 'block';
   bar.style.width = '10%';
 
   try {
-    const res = await fetch('/api/tag-mapping/generate', { method: 'POST' });
+    const url = sourceTable
+      ? `/api/tag-mapping/generate?source_table=${encodeURIComponent(sourceTable)}`
+      : '/api/tag-mapping/generate';
+    const res = await fetch(url, { method: 'POST' });
     if (!res.ok) throw new Error(await res.text());
-    status.textContent = 'Generate berjalan di background. Refresh halaman setelah beberapa menit.';
+    status.textContent = `Generate ${label} berjalan di background...`;
     bar.style.width = '30%';
 
     // Poll status
@@ -241,11 +257,17 @@ async function generateKandidats() {
       try {
         const sr = await fetch('/api/tag-mapping/status');
         const sd = await sr.json();
+        if (sd.current_table) {
+          status.textContent = `Sedang proses: ${sd.current_table}...`;
+          // Animate bar
+          const cur = parseFloat(bar.style.width) || 30;
+          if (cur < 90) bar.style.width = (cur + 2) + '%';
+        }
         if (!sd.running) {
           clearInterval(poll);
           bar.style.width = '100%';
           btn.disabled = false;
-          btn.textContent = '⚙ Generate Kandidat';
+          btn.textContent = '⚙ Generate Semua Tabel';
           const res = sd.last_result;
           if (res) {
             const total = Object.values(res).reduce((s, t) => s + (t.total || 0), 0);
@@ -260,7 +282,7 @@ async function generateKandidats() {
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
     btn.disabled = false;
-    btn.textContent = '⚙ Generate Kandidat';
+    btn.textContent = '⚙ Generate Semua Tabel';
   }
 }
 
