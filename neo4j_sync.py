@@ -13,6 +13,29 @@ NEO4J_URI      = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER     = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
+TABLE_NEO4J_CONFIG = {
+    "sap_notifications":      {"label": "SAPNotification",    "rel": "HAS_NOTIFICATION"},
+    "sap_work_orders":        {"label": "SAPWorkOrder",       "rel": "HAS_WORK_ORDER"},
+    "bad_actor_monitoring":   {"label": "BadActor",           "rel": "HAS_BAD_ACTOR"},
+    "icu_monitoring":         {"label": "ICUMonitoring",      "rel": "HAS_ICU"},
+    "atg_monitoring":         {"label": "ATGMonitoring",      "rel": "HAS_ATG"},
+    "metering_monitoring":    {"label": "MeteringMonitor",    "rel": "HAS_METERING"},
+    "boc":                    {"label": "BOC",                "rel": "HAS_BOC"},
+    "pipeline_inspection":    {"label": "PipelineInspection", "rel": "HAS_PIPELINE_INSPECTION"},
+    "zero_clamp":             {"label": "ZeroClamp",          "rel": "HAS_ZERO_CLAMP"},
+    "power_stream":           {"label": "PowerStream",        "rel": "HAS_POWER_STREAM"},
+    "critical_eqp_prim_sec":  {"label": "CriticalEquipment",  "rel": "IS_CRITICAL"},
+    "inspection_plan":        {"label": "InspectionPlan",     "rel": "HAS_INSPECTION_PLAN"},
+    "readiness_jetty":        {"label": "ReadinessJetty",     "rel": "HAS_READINESS"},
+    "readiness_tank":         {"label": "ReadinessTank",      "rel": "HAS_READINESS"},
+    "readiness_spm":          {"label": "ReadinessSPM",       "rel": "HAS_READINESS"},
+    "workplan_jetty":         {"label": "WorkplanJetty",      "rel": "HAS_WORKPLAN"},
+    "workplan_tank":          {"label": "WorkplanTank",       "rel": "HAS_WORKPLAN"},
+    "spm_workplan":           {"label": "WorkplanSPM",        "rel": "HAS_WORKPLAN"},
+    "irkap_program":          {"label": "IRKAPProgram",       "rel": "HAS_IRKAP"},
+    "irkap_actual":           {"label": "IRKAPActual",        "rel": "HAS_IRKAP_ACTUAL"},
+}
+
 def get_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
@@ -240,3 +263,228 @@ def get_neo4j_stats() -> dict:
 
     except Exception as e:
         return {"connected": False, "error": str(e)}
+
+
+def sync_table(table_name: str, tag_col: str, neo4j_label: str, rel_type: str, batch_size: int = 500):
+    """Sync a PostgreSQL table to Neo4j. Returns dict with nodes_created and rels_created."""
+    from db_equipment import get_conn
+
+    nodes_created = 0
+    rels_created = 0
+
+    driver = get_driver()
+    if driver is None:
+        return {"error": "Neo4j connection unavailable", "nodes_created": 0, "rels_created": 0}
+
+    try:
+        with get_conn() as conn:
+            # Get total count
+            count_row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table_name}").fetchone()
+            total = count_row["cnt"] if count_row else 0
+
+            offset = 0
+            while offset < total:
+                rows = conn.execute(
+                    f"SELECT * FROM {table_name} LIMIT %s OFFSET %s", (batch_size, offset)
+                ).fetchall()
+                if not rows:
+                    break
+
+                batch = []
+                for i, row in enumerate(rows):
+                    row_dict = {}
+                    for col, val in row.items():
+                        # Convert non-serializable types
+                        if hasattr(val, 'isoformat'):
+                            val = val.isoformat()
+                        elif val is not None and not isinstance(val, (str, int, float, bool)):
+                            val = str(val)
+                        row_dict[col] = val
+                    row_dict['_row_index'] = offset + i
+                    batch.append(row_dict)
+
+                # Build cypher - label must be interpolated (comes from our config, not user input)
+                cypher = f"""
+UNWIND $batch AS row
+MERGE (e:Equipment {{tag_number: row.{tag_col}}})
+CREATE (n:{neo4j_label})
+SET n = row
+MERGE (e)-[r:{rel_type}]->(n)
+ON CREATE SET r.created_at = datetime()
+RETURN count(n) AS nc
+"""
+                with driver.session() as session:
+                    result = session.run(cypher, batch=batch)
+                    record = result.single()
+                    if record:
+                        nodes_created += record["nc"]
+                        rels_created += record["nc"]
+
+                offset += batch_size
+
+    except Exception as e:
+        return {"error": str(e), "nodes_created": nodes_created, "rels_created": rels_created}
+    finally:
+        driver.close()
+
+    return {"nodes_created": nodes_created, "rels_created": rels_created}
+
+
+def sync_all_tables(progress_callback=None):
+    """Sync all tables defined in TABLE_NEO4J_CONFIG. Returns summary dict."""
+    from db_equipment import TABLE_CATALOG
+
+    # Build lookup from TABLE_CATALOG for tag_col
+    tag_col_lookup = {entry["table"]: entry["tag_col"] for entry in TABLE_CATALOG}
+
+    summary = {}
+    for table_name, config in TABLE_NEO4J_CONFIG.items():
+        tag_col = tag_col_lookup.get(table_name)
+        if not tag_col:
+            summary[table_name] = {"error": "tag_col not found in TABLE_CATALOG"}
+            continue
+
+        if progress_callback:
+            progress_callback(table_name)
+
+        result = sync_table(
+            table_name=table_name,
+            tag_col=tag_col,
+            neo4j_label=config["label"],
+            rel_type=config["rel"],
+        )
+        summary[table_name] = result
+
+    return summary
+
+
+def get_graph_for_tag(tag: str):
+    """Query Neo4j for 1-hop neighborhood of an Equipment node. Returns vis.js format."""
+    driver = get_driver()
+    if driver is None:
+        return {"nodes": [], "edges": [], "error": "Neo4j connection unavailable"}
+
+    nodes = []
+    edges = []
+    seen_node_ids = set()
+
+    try:
+        with driver.session() as session:
+            # Get the equipment node itself
+            eq_result = session.run(
+                "MATCH (e:Equipment {tag_number: $tag}) RETURN e LIMIT 1",
+                tag=tag
+            )
+            eq_record = eq_result.single()
+            if not eq_record:
+                return {"nodes": [], "edges": [], "error": f"Equipment '{tag}' not found"}
+
+            eq_node = eq_record["e"]
+            eq_props = dict(eq_node.items())
+            eq_id = f"E:{tag}"
+
+            title_parts = [f"{k}: {v}" for k, v in list(eq_props.items())[:5] if v is not None]
+            nodes.append({
+                "id": eq_id,
+                "label": tag,
+                "group": "Equipment",
+                "title": "\n".join(title_parts),
+            })
+            seen_node_ids.add(eq_id)
+
+            # Get all 1-hop connected nodes (limit 50 per relationship type)
+            rel_result = session.run(
+                """
+                MATCH (e:Equipment {tag_number: $tag})-[r]->(n)
+                RETURN type(r) AS rel_type, labels(n) AS node_labels, id(n) AS node_id, properties(n) AS props
+                LIMIT 200
+                """,
+                tag=tag
+            )
+
+            for record in rel_result:
+                rel_type = record["rel_type"]
+                node_labels = record["node_labels"]
+                node_id = record["node_id"]
+                props = dict(record["props"])
+
+                vis_node_id = f"N:{node_id}"
+                group = node_labels[0] if node_labels else "Unknown"
+
+                # Build label from props
+                label_val = (
+                    props.get("tag_number") or
+                    props.get("tag_no") or
+                    props.get("equipment") or
+                    props.get("description") or
+                    group
+                )
+                if label_val and len(str(label_val)) > 20:
+                    label_val = str(label_val)[:17] + "..."
+
+                title_parts = [f"{k}: {v}" for k, v in list(props.items())[:6] if v is not None]
+
+                if vis_node_id not in seen_node_ids:
+                    nodes.append({
+                        "id": vis_node_id,
+                        "label": str(label_val),
+                        "group": group,
+                        "title": "\n".join(title_parts),
+                    })
+                    seen_node_ids.add(vis_node_id)
+
+                edges.append({
+                    "from": eq_id,
+                    "to": vis_node_id,
+                    "label": rel_type,
+                })
+
+            # Also check incoming relationships
+            in_result = session.run(
+                """
+                MATCH (n)-[r]->(e:Equipment {tag_number: $tag})
+                RETURN type(r) AS rel_type, labels(n) AS node_labels, id(n) AS node_id, properties(n) AS props
+                LIMIT 50
+                """,
+                tag=tag
+            )
+            for record in in_result:
+                rel_type = record["rel_type"]
+                node_labels = record["node_labels"]
+                node_id = record["node_id"]
+                props = dict(record["props"])
+
+                vis_node_id = f"N:{node_id}"
+                group = node_labels[0] if node_labels else "Unknown"
+
+                label_val = (
+                    props.get("tag_number") or
+                    props.get("tag_no") or
+                    props.get("equipment") or
+                    props.get("description") or
+                    group
+                )
+                if label_val and len(str(label_val)) > 20:
+                    label_val = str(label_val)[:17] + "..."
+
+                title_parts = [f"{k}: {v}" for k, v in list(props.items())[:6] if v is not None]
+
+                if vis_node_id not in seen_node_ids:
+                    nodes.append({
+                        "id": vis_node_id,
+                        "label": str(label_val),
+                        "group": group,
+                        "title": "\n".join(title_parts),
+                    })
+                    seen_node_ids.add(vis_node_id)
+
+                edges.append({
+                    "from": vis_node_id,
+                    "to": eq_id,
+                    "label": rel_type,
+                })
+
+    except Exception as e:
+        return {"nodes": nodes, "edges": edges, "error": str(e)}
+
+    return {"nodes": nodes, "edges": edges}

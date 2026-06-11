@@ -443,6 +443,37 @@ def _run_full_sync():
     finally:
         _sync_running = False
 
+_table_sync_running = False
+_last_table_sync_result = None
+
+def _run_table_sync():
+    global _table_sync_running, _last_table_sync_result
+    _table_sync_running = True
+    try:
+        from neo4j_sync import sync_all_tables
+        _last_table_sync_result = sync_all_tables()
+    finally:
+        _table_sync_running = False
+
+@app.get("/api/neo4j/graph")
+async def api_neo4j_graph(tag: str = ""):
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag parameter required")
+    from neo4j_sync import get_graph_for_tag
+    return get_graph_for_tag(tag)
+
+@app.post("/api/neo4j/sync/tables")
+async def api_sync_all_tables(background_tasks: BackgroundTasks):
+    from neo4j_sync import get_driver
+    if get_driver() is None:
+        raise HTTPException(status_code=503, detail="Neo4j tidak dapat diakses")
+    background_tasks.add_task(_run_table_sync)
+    return {"message": "Sync semua tabel dimulai di background"}
+
+@app.get("/api/neo4j/sync/tables/status")
+async def api_sync_tables_status():
+    return {"running": _table_sync_running, "last_result": _last_table_sync_result}
+
 # ─── CHATBOT ROUTES ──────────────────────────────────────────────────────────
 
 from chatbot import chat as chatbot_chat
