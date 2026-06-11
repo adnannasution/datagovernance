@@ -7,6 +7,9 @@ import difflib
 from db_equipment import get_conn, TABLE_CATALOG
 
 
+SAP_TABLES = {"sap_notifications", "sap_work_orders"}
+
+
 def normalize_tag(tag: str) -> str:
     """Normalize a tag number: uppercase, strip whitespace, remove separators."""
     if not tag:
@@ -89,39 +92,45 @@ def generate_candidates(batch_size: int = 1000) -> dict:
                     method = "exact"
                     status = "approved"
 
-                # ── Token/normalize match ────────────────────────────────────
-                if tag_canonical is None:
-                    norm_variant = normalize_tag(variant)
-                    if norm_variant and norm_variant in norm_to_canonical:
-                        tag_canonical = norm_to_canonical[norm_variant]
-                        confidence = 0.95
-                        method = "fuzzy_token"
-                        status = "approved"
+                if table_name in SAP_TABLES:
+                    # SAP tables: only exact match, skip fuzzy entirely
+                    if tag_canonical is None:
+                        counts["skipped"] += 1
+                        continue
+                else:
+                    # ── Token/normalize match ────────────────────────────────
+                    if tag_canonical is None:
+                        norm_variant = normalize_tag(variant)
+                        if norm_variant and norm_variant in norm_to_canonical:
+                            tag_canonical = norm_to_canonical[norm_variant]
+                            confidence = 0.95
+                            method = "fuzzy_token"
+                            status = "approved"
 
-                # ── Levenshtein via SequenceMatcher ──────────────────────────
-                if tag_canonical is None:
-                    norm_variant = normalize_tag(variant)
-                    best_ratio = 0.0
-                    best_canon = None
+                    # ── Levenshtein via SequenceMatcher ──────────────────────
+                    if tag_canonical is None:
+                        norm_variant = normalize_tag(variant)
+                        best_ratio = 0.0
+                        best_canon = None
 
-                    # Only compare against normalized keys for efficiency
-                    for norm_canon, canon in norm_to_canonical.items():
-                        ratio = difflib.SequenceMatcher(
-                            None, norm_variant, norm_canon
-                        ).ratio()
-                        if ratio > best_ratio:
-                            best_ratio = ratio
-                            best_canon = canon
+                        # Only compare against normalized keys for efficiency
+                        for norm_canon, canon in norm_to_canonical.items():
+                            ratio = difflib.SequenceMatcher(
+                                None, norm_variant, norm_canon
+                            ).ratio()
+                            if ratio > best_ratio:
+                                best_ratio = ratio
+                                best_canon = canon
 
-                    if best_ratio >= 0.85 and best_canon is not None:
-                        tag_canonical = best_canon
-                        confidence = round(best_ratio, 3)
-                        method = "fuzzy_levenshtein"
-                        status = "pending"
+                        if best_ratio >= 0.85 and best_canon is not None:
+                            tag_canonical = best_canon
+                            confidence = round(best_ratio, 3)
+                            method = "fuzzy_levenshtein"
+                            status = "pending"
 
-                if tag_canonical is None:
-                    counts["skipped"] += 1
-                    continue
+                    if tag_canonical is None:
+                        counts["skipped"] += 1
+                        continue
 
                 # ── Upsert into tag_mapping ──────────────────────────────────
                 try:

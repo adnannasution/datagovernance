@@ -547,8 +547,8 @@ async def page_tag_mapping(
     status: str = "pending",
     page: int = 1,
 ):
-    limit = 50
-    mappings, total = _db_tm.get_pending_mappings(
+    limit = 20
+    groups, total_groups = _db_tm.get_grouped_mappings(
         ru=ru or None,
         source_table=source_table or None,
         status=status or None,
@@ -558,13 +558,11 @@ async def page_tag_mapping(
     stats = _db_tm.get_mapping_stats()
     ru_list = _db_tm.get_ru_list()
     table_list = _db_tm.get_source_table_list()
-    offset = (page - 1) * limit
     return templates.TemplateResponse(request, "tag_mapping.html", {
-        "mappings": mappings,
-        "total": total,
+        "groups": groups,
+        "total_groups": total_groups,
         "page": page,
-        "total_pages": (total + limit - 1) // limit,
-        "offset": offset,
+        "total_pages": (total_groups + limit - 1) // limit,
         "stats": stats,
         "ru_list": ru_list,
         "table_list": table_list,
