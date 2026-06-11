@@ -30,8 +30,8 @@
     <span id="generate-status" style="font-size:.85rem;color:var(--text-muted)"></span>
   </div>
   <div id="generate-progress" style="display:none;margin-top:.75rem">
-    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-      <div id="progress-bar" style="height:100%;width:0%;background:var(--accent);transition:width .4s"></div>
+    <div class="progress-bar">
+      <div id="progress-bar" class="progress-fill" style="width:0%"></div>
     </div>
   </div>
 </div>
@@ -66,23 +66,33 @@
 {# ── Grouped mapping cards ─────────────────────────────────────── #}
 {% if groups %}
   {% for group in groups %}
+  {# Determine header accent class based on group state #}
+  {% if group.pending_count > 0 %}
+    {% set header_class = 'has-pending' %}
+  {% elif group.variants | selectattr('status', 'equalto', 'rejected') | list | length > 0 %}
+    {% set header_class = 'has-rejected' %}
+  {% else %}
+    {% set header_class = 'all-approved' %}
+  {% endif %}
+
   <div class="card mapping-group" style="margin-bottom:1rem;padding:0;overflow:hidden">
     {# Group header #}
-    <div style="background:var(--surface-2,#f8f9fa);padding:12px 16px;border-bottom:1px solid var(--border)">
+    <div class="mapping-group-header {{ header_class }}">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-          <strong style="font-size:15px;color:var(--text-primary,#2c3e50);font-family:monospace">{{ group.tag_canonical }}</strong>
-          <span style="color:var(--text-muted);font-size:.85rem">{{ group.description }}</span>
-          <span class="badge badge-tipe" style="background:#e8f4fd;color:#2980b9;font-size:.75rem">{{ group.maintenance_plant }}</span>
+        <div style="display:flex;align-items:center;gap:.625rem;flex-wrap:wrap">
+          <strong style="font-size:14px;color:var(--text);font-family:monospace;letter-spacing:-0.01em">{{ group.tag_canonical }}</strong>
+          <span style="color:var(--text3);font-size:.82rem">{{ group.description }}</span>
+          <span class="badge badge-ru" style="font-size:.72rem">{{ group.maintenance_plant }}</span>
         </div>
         <div style="display:flex;align-items:center;gap:.5rem">
-          <span style="color:var(--text-muted);font-size:.8rem">{{ group.variant_count }} variant
+          <span style="color:var(--text3);font-size:.78rem">
+            {{ group.variant_count }} variant
             {% if group.pending_count > 0 %}
-              · <span style="color:#ca8a04;font-weight:600">{{ group.pending_count }} pending</span>
+              &nbsp;·&nbsp;<span style="color:var(--warning-dark);font-weight:600">{{ group.pending_count }} pending</span>
             {% endif %}
           </span>
           {% if group.pending_count > 0 %}
-          <button class="btn btn-primary" style="font-size:.78rem;padding:.3rem .75rem"
+          <button class="btn btn-primary" style="font-size:.75rem;padding:.3rem .75rem"
                   onclick="approveGroup('{{ group.tag_canonical }}', [{% for v in group.variants %}{% if v.status == 'pending' %}{{ v.id }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}])">
             ✓ Approve Semua Pending
           </button>
@@ -92,7 +102,7 @@
     </div>
 
     {# Variants table #}
-    <div class="table-wrap" style="margin:0">
+    <div style="margin:0">
       <table class="data-table" style="margin:0">
         <thead>
           <tr>
@@ -113,25 +123,25 @@
             <td onclick="event.stopPropagation()">
               <input type="checkbox" class="row-chk" value="{{ v.id }}" onchange="updateBulkCount()"/>
             </td>
-            <td><code style="font-size:.82rem">{{ v.tag_variant }}</code></td>
-            <td><span class="badge badge-tipe" style="font-size:.75rem">{{ v.source_table }}</span></td>
+            <td><code style="font-size:.8rem;background:var(--surface2);padding:2px 6px;border-radius:4px">{{ v.tag_variant }}</code></td>
+            <td><span class="badge badge-tipe" style="font-size:.72rem">{{ v.source_table }}</span></td>
             <td>
               {% set conf = v.confidence | float %}
               {% if conf >= 0.95 %}
-                <span class="badge" style="background:#16a34a;color:#fff">{{ '%.3f'|format(conf) }}</span>
+                <span class="badge" style="background:var(--success-bg);color:var(--success-dark)">{{ '%.3f'|format(conf) }}</span>
               {% elif conf >= 0.85 %}
-                <span class="badge" style="background:#ca8a04;color:#fff">{{ '%.3f'|format(conf) }}</span>
+                <span class="badge" style="background:var(--warning-bg);color:var(--warning-dark)">{{ '%.3f'|format(conf) }}</span>
               {% else %}
-                <span class="badge" style="background:#dc2626;color:#fff">{{ '%.3f'|format(conf) }}</span>
+                <span class="badge" style="background:var(--danger-bg);color:var(--danger-dark)">{{ '%.3f'|format(conf) }}</span>
               {% endif %}
             </td>
             <td>
               {% if v.match_method == 'exact' %}
-                <span class="badge" style="background:#2563eb;color:#fff">exact</span>
+                <span class="badge" style="background:var(--primary-bg);color:var(--primary)">exact</span>
               {% elif v.match_method == 'fuzzy_token' %}
-                <span class="badge" style="background:#16a34a;color:#fff">token</span>
+                <span class="badge" style="background:var(--success-bg);color:var(--success-dark)">token</span>
               {% else %}
-                <span class="badge" style="background:#ca8a04;color:#fff">levenshtein</span>
+                <span class="badge" style="background:var(--warning-bg);color:var(--warning-dark)">levenshtein</span>
               {% endif %}
             </td>
             <td>
@@ -145,7 +155,7 @@
             </td>
             <td onclick="event.stopPropagation()" style="white-space:nowrap">
               {% if v.status == 'pending' %}
-              <button class="btn-icon" style="color:#16a34a" title="Approve"
+              <button class="btn-icon" style="color:var(--success-dark)" title="Approve"
                       onclick="singleAction({{ v.id }}, 'approve')">✓</button>
               <button class="btn-icon danger" title="Reject"
                       onclick="singleAction({{ v.id }}, 'reject')">✗</button>
@@ -153,7 +163,7 @@
               <button class="btn-icon danger" title="Reject"
                       onclick="singleAction({{ v.id }}, 'reject')">✗</button>
               {% else %}
-              <button class="btn-icon" style="color:#16a34a" title="Approve"
+              <button class="btn-icon" style="color:var(--success-dark)" title="Approve"
                       onclick="singleAction({{ v.id }}, 'approve')">✓</button>
               {% endif %}
             </td>
@@ -165,8 +175,12 @@
   </div>
   {% endfor %}
 {% else %}
-  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted)">
-    Tidak ada data ditemukan
+  <div class="card">
+    <div class="empty-state">
+      <div class="empty-state-icon">🔍</div>
+      <div class="empty-state-title">Tidak ada data ditemukan</div>
+      <div class="empty-state-desc">Coba ubah filter atau generate kandidat baru.</div>
+    </div>
   </div>
 {% endif %}
 
@@ -255,7 +269,7 @@ async function singleAction(id, action) {
   const res = await fetch(`/api/tag-mapping/${id}/${action}`, { method: 'POST' });
   if (res.ok) {
     const row = document.getElementById('row-' + id);
-    if (row) row.style.opacity = '0.4';
+    if (row) { row.style.opacity = '0.4'; row.style.transition = 'opacity 0.3s'; }
     setTimeout(() => location.reload(), 600);
   } else {
     alert('Gagal: ' + (await res.text()));
@@ -280,8 +294,6 @@ async function approveGroup(canonical, ids) {
 
 // ── Group checkbox toggle ──────────────────────────────────────────
 function toggleGroup(masterChk) {
-  const group = masterChk.dataset.group;
-  // Find all row checkboxes within the same group card
   const card = masterChk.closest('.mapping-group');
   if (card) {
     card.querySelectorAll('.row-chk').forEach(c => c.checked = masterChk.checked);

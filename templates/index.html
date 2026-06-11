@@ -31,7 +31,11 @@
       <span class="bar-count">{{ row.n }}</span>
     </div>
     {% else %}
-    <p class="empty-text">Belum ada data</p>
+    <div class="empty-state">
+      <div class="empty-state-icon">📂</div>
+      <div class="empty-state-title">Belum ada data</div>
+      <div class="empty-state-desc">Upload dokumen untuk mulai melihat statistik.</div>
+    </div>
     {% endfor %}
   </div>
   <div class="card">
@@ -45,7 +49,11 @@
       <span class="bar-count">{{ row.n }}</span>
     </div>
     {% else %}
-    <p class="empty-text">Belum ada data</p>
+    <div class="empty-state">
+      <div class="empty-state-icon">🗂️</div>
+      <div class="empty-state-title">Belum ada data</div>
+      <div class="empty-state-desc">Tipe dokumen akan muncul setelah upload.</div>
+    </div>
     {% endfor %}
   </div>
 </div>
@@ -64,7 +72,11 @@
     <span class="badge badge-{{ doc.status }}">{{ doc.status }}</span>
   </a>
   {% else %}
-  <p class="empty-text">Belum ada aktivitas</p>
+  <div class="empty-state">
+    <div class="empty-state-icon">📋</div>
+    <div class="empty-state-title">Belum ada aktivitas</div>
+    <div class="empty-state-desc">Dokumen yang baru diupload akan muncul di sini.</div>
+  </div>
   {% endfor %}
 </div>
 {% endblock %}

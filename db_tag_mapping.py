@@ -255,6 +255,7 @@ def get_ru_list() -> list:
                 FROM master_data_equipment
                 WHERE maintenance_plant IS NOT NULL
                   AND maintenance_plant <> ''
+                  AND maintenance_plant NOT LIKE 'K%'
                 ORDER BY maintenance_plant
                 """
             ).fetchall()
