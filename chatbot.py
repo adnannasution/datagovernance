@@ -489,6 +489,8 @@ ATURAN PENTING:
 - Jangan pakai arah terbalik <-[]- kecuali untuk Document dan domain relations
 - JANGAN filter WHERE dengan nilai spesifik ("Buruk", "Active") karena nilai tidak diketahui pasti
 - Gunakan IS NOT NULL untuk memastikan data ada, biarkan LLM analisis nilainya
+- Equipment node SELALU pakai e.tag_number (BUKAN e.equipment, BUKAN e.tag_no)
+- Untuk RETURN selalu gunakan: e.tag_number, e.description, e.maintenance_plant
 - Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa backtick, dengan LIMIT 20"""
 
 
