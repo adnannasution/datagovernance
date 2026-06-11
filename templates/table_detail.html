@@ -59,13 +59,32 @@
 </div>
 
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
     <div class="card-title" style="margin:0">Data Browser</div>
-    <form method="get" style="display:flex;gap:8px">
-      <input type="text" name="search" value="{{ search }}" placeholder="Cari..." style="width:220px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px"/>
-      <button type="submit" class="btn btn-primary">Cari</button>
-      {% if search %}<a href="/catalog/{{ tbl.table }}" class="btn">Reset</a>{% endif %}
-    </form>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <form method="get" style="display:flex;gap:8px">
+        <input type="text" name="search" value="{{ search }}" placeholder="Cari..." style="width:220px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px"/>
+        <button type="submit" class="btn btn-primary">Cari</button>
+        {% if search %}<a href="/catalog/{{ tbl.table }}" class="btn">Reset</a>{% endif %}
+      </form>
+      <div style="position:relative">
+        <button class="btn btn-secondary" onclick="toggleColPicker()" id="col-picker-btn">
+          &#9881; Kolom <span id="col-count">6</span>
+        </button>
+        <div id="col-picker" style="display:none; position:absolute; right:0; top:36px; background:white; border:1px solid #e2e8f0; border-radius:8px; padding:12px; min-width:220px; z-index:100; box-shadow:0 4px 20px rgba(0,0,0,0.1); max-height:300px; overflow-y:auto;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <strong style="font-size:13px;">Pilih Kolom</strong>
+            <button onclick="resetCols()" style="font-size:12px;color:#2563eb;background:none;border:none;cursor:pointer;">Reset</button>
+          </div>
+          {% for col in cols %}
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px;">
+            <input type="checkbox" class="col-toggle" data-col="{{ loop.index0 }}" {% if loop.index0 < 6 %}checked{% endif %} onchange="toggleCol({{ loop.index0 }}, this.checked)">
+            {{ col.column_name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
   </div>
 
   <div style="overflow-x:auto">
@@ -73,7 +92,7 @@
       <thead>
         <tr>
           {% for col in cols %}
-          <th style="white-space:nowrap">{{ col.column_name }}</th>
+          <th class="col-{{ loop.index0 }}" style="white-space:nowrap{% if loop.index0 >= 6 %};display:none{% endif %}">{{ col.column_name }}</th>
           {% endfor %}
         </tr>
       </thead>
@@ -81,7 +100,7 @@
         {% for row in rows %}
         <tr>
           {% for col in cols %}
-          <td style="white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px">
+          <td class="col-{{ loop.index0 }}" style="white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px{% if loop.index0 >= 6 %};display:none{% endif %}">
             {{ row[col.column_name] if row[col.column_name] is not none else '—' }}
           </td>
           {% endfor %}
@@ -93,18 +112,64 @@
     </table>
   </div>
 
-  {% if total_pages > 1 %}
-  <div class="pagination mt-lg">
-    {% if page > 1 %}
-    <a href="?page={{ page-1 }}&search={{ search }}" class="btn btn-secondary">← Prev</a>
-    {% endif %}
-    <span class="page-info">Halaman {{ page }} dari {{ total_pages }} ({{ "{:,}".format(total) }} rows)</span>
-    {% if page < total_pages %}
-    <a href="?page={{ page+1 }}&search={{ search }}" class="btn btn-secondary">Next →</a>
-    {% endif %}
+  <div class="pagination-wrap">
+    <span class="pagination-info">
+      Menampilkan {{ offset + 1 }}–{{ [offset + limit, total]|min }} dari {{ "{:,}".format(total) }} data
+    </span>
+    <div class="pagination-btns">
+      {% if page > 1 %}
+      <a href="?page=1&search={{ search }}" class="pag-btn">«</a>
+      <a href="?page={{ page-1 }}&search={{ search }}" class="pag-btn">‹</a>
+      {% endif %}
+
+      {% for p in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+      <a href="?page={{ p }}&search={{ search }}" class="pag-btn {% if p == page %}active{% endif %}">{{ p }}</a>
+      {% endfor %}
+
+      {% if page < total_pages %}
+      <a href="?page={{ page+1 }}&search={{ search }}" class="pag-btn">›</a>
+      <a href="?page={{ total_pages }}&search={{ search }}" class="pag-btn">»</a>
+      {% endif %}
+    </div>
   </div>
-  {% else %}
-  <div class="pagination"><span class="page-info">{{ "{:,}".format(total) }} rows</span></div>
-  {% endif %}
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DEFAULT_COLS = 6;
+
+function toggleColPicker() {
+    const p = document.getElementById('col-picker');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleCol(idx, show) {
+    document.querySelectorAll(`.col-${idx}`).forEach(el => {
+        el.style.display = show ? '' : 'none';
+    });
+    updateColCount();
+}
+
+function updateColCount() {
+    const checked = document.querySelectorAll('.col-toggle:checked').length;
+    document.getElementById('col-count').textContent = checked;
+}
+
+function resetCols() {
+    document.querySelectorAll('.col-toggle').forEach((cb, i) => {
+        const show = i < DEFAULT_COLS;
+        cb.checked = show;
+        toggleCol(i, show);
+    });
+}
+
+// Close picker when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#col-picker') && !e.target.closest('#col-picker-btn')) {
+        document.getElementById('col-picker').style.display = 'none';
+    }
+});
+</script>
 {% endblock %}

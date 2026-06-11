@@ -350,6 +350,8 @@ async def page_table_detail(request: Request, table_name: str,
         "total": total,
         "page": page,
         "total_pages": (total + limit - 1) // limit,
+        "offset": offset,
+        "limit": limit,
         "search": search,
         "quality": quality,
         "title": tbl_meta["label"]

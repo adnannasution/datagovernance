@@ -1568,3 +1568,19 @@ body {
   0%   { background-position: -100% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* Tab navigation */
+.tab-nav { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:1.5rem; }
+.tab-btn { padding:10px 20px; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; font-size:14px; color:var(--text3); transition:all 0.15s; }
+.tab-btn:hover { color:var(--text1); }
+.tab-btn.active { color:#2563eb; border-bottom-color:#2563eb; font-weight:600; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Pagination */
+.pagination-wrap { display:flex; align-items:center; justify-content:space-between; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); }
+.pagination-info { font-size:13px; color:var(--text3); }
+.pagination-btns { display:flex; gap:4px; }
+.pag-btn { padding:6px 10px; border:1px solid var(--border2); border-radius:6px; font-size:13px; color:var(--text2); text-decoration:none; transition:all 0.15s; }
+.pag-btn:hover { background:#eff6ff; border-color:#2563eb; color:#2563eb; }
+.pag-btn.active { background:#2563eb; border-color:#2563eb; color:white; font-weight:600; }

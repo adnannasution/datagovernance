@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('overview', event)">Overview</button>
+  <button class="tab-btn" onclick="switchTab('coverage', event)">Coverage & Progress</button>
+  <button class="tab-btn" onclick="switchTab('visualisasi', event)">Visualisasi Graph</button>
+  <button class="tab-btn" onclick="switchTab('sync', event)">Sync Management</button>
+</div>
+
+<!-- TAB: Overview -->
+<div id="tab-overview" class="tab-panel" style="display:block">
+
 {% if not stats.connected %}
 <div style="padding:1rem;background:var(--danger-bg);color:var(--danger);border-radius:var(--radius);margin-bottom:1rem;font-size:13px">
   ⚠ Neo4j tidak dapat diakses — {{ stats.error or 'Connection error' }}. Periksa NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD di environment variables.
@@ -64,41 +74,90 @@
 </div>
 
 <div class="card mt-lg">
-  <div class="card-title">Sync Management</div>
-  <div style="display:flex;align-items:flex-start;gap:2rem;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <div>
-        <div style="font-size:13px;margin-bottom:4px">Full Sync — sync semua dokumen dari PostgreSQL ke Neo4j</div>
-        <div style="font-size:12px;color:var(--text3)">Dokumen yang sudah ada akan di-update, yang belum akan dibuat baru</div>
-      </div>
-      <button class="btn btn-primary" id="sync-btn" onclick="startSync()" {% if not stats.connected %}disabled{% endif %}>
-        Jalankan Full Sync
-      </button>
-    </div>
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <div>
-        <div style="font-size:13px;margin-bottom:4px">Table Sync — sync semua tabel equipment ke Neo4j</div>
-        <div style="font-size:12px;color:var(--text3)">Sync SAP, Monitoring, Inspection, Readiness, Workplan, IRKAP</div>
-      </div>
-      <button class="btn btn-secondary" id="table-sync-btn" onclick="startTableSync()" {% if not stats.connected %}disabled{% endif %}>
-        Sync Semua Tabel
-      </button>
-    </div>
-  </div>
+  <div class="card-title">Cypher Query Explorer</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Contoh query yang bisa dijalankan di Neo4j Browser</div>
 
-  <div id="table-sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
-    <div id="table-sync-msg" style="font-size:13px;margin-bottom:8px">Sync tabel berjalan...</div>
-    <div class="progress-bar"><div class="progress-fill" id="table-sync-progress" style="width:0%"></div></div>
-  </div>
-  <div id="table-sync-result" class="hidden" style="margin-top:1rem"></div>
+  {% set examples = [
+    ("Semua dokumen terkait satu equipment", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment {tag_number: '4B-P-001'})\nRETURN d.judul, d.tipe, d.ru"),
+    ("Equipment dengan dokumen terbanyak", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nRETURN e.tag_number, count(d) as total_docs\nORDER BY total_docs DESC LIMIT 10"),
+    ("Dokumen SOP yang terkait equipment tertentu", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nWHERE d.tipe = 'SOP'\nRETURN d.judul, e.tag_number, e.description"),
+    ("Equipment tanpa dokumen (knowledge gap)", "MATCH (e:Equipment)\nWHERE NOT (e)<-[:TERKAIT_DENGAN]-()\nRETURN e.tag_number, e.description LIMIT 20")
+  ] %}
 
-  <div id="sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
-    <div id="sync-msg" style="font-size:13px;margin-bottom:8px">Sync berjalan...</div>
-    <div class="progress-bar"><div class="progress-fill" id="sync-progress" style="width:0%"></div></div>
+  {% for label, query in examples %}
+  <div style="margin-bottom:12px;padding:12px;background:var(--surface2);border-radius:var(--radius)">
+    <div style="font-size:12px;font-weight:500;margin-bottom:6px">{{ label }}</div>
+    <pre style="font-size:11px;color:var(--text2);font-family:monospace;white-space:pre-wrap;margin:0">{{ query }}</pre>
   </div>
-
-  <div id="sync-result" class="hidden" style="margin-top:1rem"></div>
+  {% endfor %}
 </div>
+
+</div><!-- /tab-overview -->
+
+<!-- TAB: Coverage & Progress -->
+<div id="tab-coverage" class="tab-panel" style="display:none">
+
+  <div id="coverage-loading" style="text-align:center;padding:2rem;color:var(--text3);font-size:13px">Memuat data coverage...</div>
+  <div id="coverage-content" style="display:none">
+
+    <!-- Summary Cards -->
+    <div class="grid-4 mb-lg">
+      <div class="stat-card">
+        <div class="stat-label">Total Records PostgreSQL</div>
+        <div class="stat-value" id="cov-total-pg">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Terhubung ke Neo4j</div>
+        <div class="stat-value" style="color:var(--success)" id="cov-connected">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Belum Terhubung</div>
+        <div class="stat-value" style="color:var(--danger)" id="cov-not-connected">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Overall Coverage</div>
+        <div class="stat-value" id="cov-overall-pct" style="font-size:2rem">—</div>
+      </div>
+    </div>
+
+    <!-- Donut Chart -->
+    <div class="card mb-lg">
+      <div class="card-title">Coverage per Domain</div>
+      <div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:0 0 300px;max-width:300px">
+          <canvas id="coverage-donut" width="300" height="300"></canvas>
+        </div>
+        <div id="coverage-legend" style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;justify-content:center"></div>
+      </div>
+    </div>
+
+    <!-- Progress Table -->
+    <div class="card">
+      <div class="card-title">Progress per Tabel</div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="coverage-table">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Tabel</th>
+              <th>Total PG</th>
+              <th>Terhubung</th>
+              <th>Belum</th>
+              <th>Coverage</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="coverage-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /coverage-content -->
+  <div id="coverage-error" style="display:none;padding:1rem;background:var(--danger-bg);color:var(--danger);border-radius:var(--radius);font-size:13px"></div>
+</div><!-- /tab-coverage -->
+
+<!-- TAB: Visualisasi Graph -->
+<div id="tab-visualisasi" class="tab-panel" style="display:none">
 
 <div class="card mt-lg">
   <div class="card-title">Graph Visualisasi Equipment</div>
@@ -143,6 +202,48 @@
   </div>
 </div>
 
+</div><!-- /tab-visualisasi -->
+
+<!-- TAB: Sync Management -->
+<div id="tab-sync" class="tab-panel" style="display:none">
+
+<div class="card mt-lg">
+  <div class="card-title">Sync Management</div>
+  <div style="display:flex;align-items:flex-start;gap:2rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;margin-bottom:4px">Full Sync — sync semua dokumen dari PostgreSQL ke Neo4j</div>
+        <div style="font-size:12px;color:var(--text3)">Dokumen yang sudah ada akan di-update, yang belum akan dibuat baru</div>
+      </div>
+      <button class="btn btn-primary" id="sync-btn" onclick="startSync()" {% if not stats.connected %}disabled{% endif %}>
+        Jalankan Full Sync
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;margin-bottom:4px">Table Sync — sync semua tabel equipment ke Neo4j</div>
+        <div style="font-size:12px;color:var(--text3)">Sync SAP, Monitoring, Inspection, Readiness, Workplan, IRKAP</div>
+      </div>
+      <button class="btn btn-secondary" id="table-sync-btn" onclick="startTableSync()" {% if not stats.connected %}disabled{% endif %}>
+        Sync Semua Tabel
+      </button>
+    </div>
+  </div>
+
+  <div id="table-sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
+    <div id="table-sync-msg" style="font-size:13px;margin-bottom:8px">Sync tabel berjalan...</div>
+    <div class="progress-bar"><div class="progress-fill" id="table-sync-progress" style="width:0%"></div></div>
+  </div>
+  <div id="table-sync-result" class="hidden" style="margin-top:1rem"></div>
+
+  <div id="sync-status" class="hidden" style="margin-top:1rem;padding:1rem;background:var(--surface2);border-radius:var(--radius)">
+    <div id="sync-msg" style="font-size:13px;margin-bottom:8px">Sync berjalan...</div>
+    <div class="progress-bar"><div class="progress-fill" id="sync-progress" style="width:0%"></div></div>
+  </div>
+
+  <div id="sync-result" class="hidden" style="margin-top:1rem"></div>
+</div>
+
 <div class="card mt-lg">
   <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
     <span>Domain Relations Sync</span>
@@ -156,29 +257,13 @@
   <div id="domain-rel-status" class="hidden" style="margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
 </div>
 
-<div class="card mt-lg">
-  <div class="card-title">Cypher Query Explorer</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Contoh query yang bisa dijalankan di Neo4j Browser</div>
-
-  {% set examples = [
-    ("Semua dokumen terkait satu equipment", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment {tag_number: '4B-P-001'})\nRETURN d.judul, d.tipe, d.ru"),
-    ("Equipment dengan dokumen terbanyak", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nRETURN e.tag_number, count(d) as total_docs\nORDER BY total_docs DESC LIMIT 10"),
-    ("Dokumen SOP yang terkait equipment tertentu", "MATCH (d:Document)-[:TERKAIT_DENGAN]->(e:Equipment)\nWHERE d.tipe = 'SOP'\nRETURN d.judul, e.tag_number, e.description"),
-    ("Equipment tanpa dokumen (knowledge gap)", "MATCH (e:Equipment)\nWHERE NOT (e)<-[:TERKAIT_DENGAN]-()\nRETURN e.tag_number, e.description LIMIT 20")
-  ] %}
-
-  {% for label, query in examples %}
-  <div style="margin-bottom:12px;padding:12px;background:var(--surface2);border-radius:var(--radius)">
-    <div style="font-size:12px;font-weight:500;margin-bottom:6px">{{ label }}</div>
-    <pre style="font-size:11px;color:var(--text2);font-family:monospace;white-space:pre-wrap;margin:0">{{ query }}</pre>
-  </div>
-  {% endfor %}
-</div>
+</div><!-- /tab-sync -->
 
 {% endblock %}
 
 {% block head_extra %}
 <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block scripts %}
@@ -186,6 +271,136 @@
 let syncInterval = null;
 let tableSyncInterval = null;
 let graphNetwork = null;
+let coverageChart = null;
+let coverageLoaded = false;
+
+// ─── Tab Switching ────────────────────────────────────────────
+
+function switchTab(name, event) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).style.display = 'block';
+    if (event && event.target) event.target.classList.add('active');
+    if (name === 'coverage') loadCoverageData();
+}
+
+// ─── Coverage & Progress ──────────────────────────────────────
+
+async function loadCoverageData() {
+    if (coverageLoaded) return;
+    document.getElementById('coverage-loading').style.display = 'block';
+    document.getElementById('coverage-content').style.display = 'none';
+    document.getElementById('coverage-error').style.display = 'none';
+
+    try {
+        const res = await fetch('/api/neo4j/coverage');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        // Summary cards
+        document.getElementById('cov-total-pg').textContent = data.total_pg.toLocaleString();
+        document.getElementById('cov-connected').textContent = data.total_connected.toLocaleString();
+        document.getElementById('cov-not-connected').textContent = (data.total_pg - data.total_connected).toLocaleString();
+        const pctEl = document.getElementById('cov-overall-pct');
+        pctEl.textContent = data.overall_pct + '%';
+        pctEl.style.color = data.overall_pct >= 80 ? '#10B981' : data.overall_pct >= 50 ? '#F59E0B' : '#EF4444';
+
+        // Donut chart
+        buildDonut(data.domains);
+
+        // Progress table — sort by coverage ascending
+        const sorted = [...data.tables].sort((a, b) => a.coverage_pct - b.coverage_pct);
+        buildCoverageTable(sorted);
+
+        document.getElementById('coverage-loading').style.display = 'none';
+        document.getElementById('coverage-content').style.display = 'block';
+        coverageLoaded = true;
+
+    } catch(err) {
+        document.getElementById('coverage-loading').style.display = 'none';
+        const errEl = document.getElementById('coverage-error');
+        errEl.textContent = 'Gagal memuat data coverage: ' + err.message;
+        errEl.style.display = 'block';
+    }
+}
+
+function coverageColor(pct) {
+    if (pct >= 80) return '#10B981';
+    if (pct >= 50) return '#F59E0B';
+    return '#EF4444';
+}
+
+function buildDonut(domains) {
+    const labels = domains.map(d => d.domain);
+    const sizes  = domains.map(d => d.total_pg);
+    const colors = domains.map(d => coverageColor(d.coverage_pct));
+
+    if (coverageChart) { coverageChart.destroy(); coverageChart = null; }
+
+    const ctx = document.getElementById('coverage-donut').getContext('2d');
+    coverageChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{ data: sizes, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: {
+            responsive: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx2) {
+                            const d = domains[ctx2.dataIndex];
+                            return [
+                                ' Total: ' + d.total_pg.toLocaleString(),
+                                ' Terhubung: ' + d.connected.toLocaleString(),
+                                ' Coverage: ' + d.coverage_pct + '%'
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Legend
+    const legendEl = document.getElementById('coverage-legend');
+    legendEl.innerHTML = domains.map(d => `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="width:12px;height:12px;border-radius:2px;background:${coverageColor(d.coverage_pct)};flex-shrink:0"></span>
+          <span style="color:var(--text2);flex:1">${d.domain}</span>
+          <span style="font-weight:600;color:${coverageColor(d.coverage_pct)}">${d.coverage_pct}%</span>
+        </div>
+    `).join('');
+}
+
+function buildCoverageTable(rows) {
+    const tbody = document.getElementById('coverage-tbody');
+    tbody.innerHTML = rows.map(r => {
+        const color = coverageColor(r.coverage_pct);
+        const fixBtn = r.coverage_pct < 80
+            ? `<a href="/tag-mapping?source_table=${r.table}&status=pending" class="btn btn-secondary" style="font-size:11px;padding:3px 8px">Perbaiki</a>`
+            : '';
+        return `
+        <tr>
+          <td style="font-size:12px">${r.domain}</td>
+          <td style="font-family:monospace;font-size:11px">${r.table}</td>
+          <td style="font-size:12px;text-align:right">${r.total_pg.toLocaleString()}</td>
+          <td style="font-size:12px;text-align:right;color:#10B981">${r.connected.toLocaleString()}</td>
+          <td style="font-size:12px;text-align:right;color:#EF4444">${r.not_connected.toLocaleString()}</td>
+          <td style="min-width:160px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div style="width:${Math.min(r.coverage_pct,100)}%;height:100%;background:${color};border-radius:3px"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;color:${color};min-width:38px;text-align:right">${r.coverage_pct}%</span>
+            </div>
+          </td>
+          <td>${fixBtn}</td>
+        </tr>`;
+    }).join('');
+}
 
 // ─── Table Sync ──────────────────────────────────────────────
 
@@ -220,6 +435,7 @@ async function startTableSync() {
           showTableSyncResult(sd.last_result);
           btn.disabled = false;
           btn.textContent = 'Sync Semua Tabel';
+          coverageLoaded = false; // reset so coverage reloads next visit
         }
       } catch(e) {}
     }, 2000);
@@ -294,7 +510,6 @@ const GROUP_COLORS = {
   Document:           '#95A5A6',
 };
 
-// Store full node data for click panel
 let _nodeDataMap = {};
 
 function getColor(group) {
@@ -396,7 +611,6 @@ async function loadGraph() {
     document.getElementById('graph-legend').classList.remove('hidden');
     document.getElementById('export-btn').disabled = false;
 
-    // Node click — show properties panel
     graphNetwork.on('click', function(params) {
       if (params.nodes.length > 0) {
         const nodeId = params.nodes[0];
@@ -526,7 +740,6 @@ async function startSync() {
     const res = await fetch('/api/neo4j/sync', { method: 'POST' });
     if (!res.ok) throw new Error('Gagal memulai sync');
 
-    // Poll status
     let pct = 10;
     syncInterval = setInterval(async () => {
       try {
