@@ -257,6 +257,20 @@
   <div id="domain-rel-status" class="hidden" style="margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
 </div>
 
+  <!-- Reset Relasi -->
+  <div class="card" style="border-left:3px solid var(--danger);margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px">⚠ Reset Semua Relasi</div>
+        <div style="font-size:12px;color:var(--text3)">Hapus semua relasi di Neo4j (node tetap ada). Gunakan sebelum sync ulang agar konsisten lewat tag mapping.</div>
+      </div>
+      <button class="btn" style="background:#fee2e2;color:#ef4444;border:1px solid #fecaca;white-space:nowrap" onclick="resetRelations(this)">
+        Reset Relasi
+      </button>
+    </div>
+    <div id="reset-rel-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
+  </div>
+
 </div><!-- /tab-sync -->
 
 {% endblock %}
@@ -681,6 +695,32 @@ function clearGraph() {
 // ─── Domain Relations Sync ────────────────────────────────────
 
 let domainRelInterval = null;
+
+async function resetRelations(btn) {
+  if (!confirm('Yakin hapus semua relasi di Neo4j? Node tetap ada, hanya relasi yang dihapus.')) return;
+  const statusEl = document.getElementById('reset-rel-status');
+  btn.disabled = true;
+  btn.textContent = 'Menghapus...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = 'Menghapus semua relasi...';
+  try {
+    const res = await fetch('/api/neo4j/reset-relations', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✅ Berhasil hapus ${data.deleted.toLocaleString()} relasi. Silakan generate kandidat lalu sync ulang.`;
+    } else {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `❌ Gagal: ${data.error}`;
+    }
+  } catch(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = `❌ Error: ${e.message}`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Reset Relasi';
+}
 
 async function startDomainRelSync() {
   const btn = document.getElementById('domain-rel-btn');
