@@ -22,13 +22,6 @@ MODEL = "gpt-4o"
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
 def _get_db_schema() -> str:
-    try:
-        from schema_cache import get_pg_schema
-        schema = get_pg_schema()
-        if schema:
-            return schema
-    except Exception:
-        pass
     return DB_SCHEMA_FALLBACK
 
 
@@ -39,46 +32,259 @@ def _get_neo4j_schema() -> str:
 # ─── Fallback static schema (used if dynamic build fails) ────────────────────
 
 DB_SCHEMA_FALLBACK = """
-Tabel-tabel yang tersedia (semua terhubung via tag number equipment):
+PostgreSQL Database Schema — Pertamina Data Governance
 
-MASTER:
-- master_data_equipment(equipment PK, description, functional_location, maintenance_plant, location, criticality, equipment_category, technical_obj_type)
+=== KOLOM TAG PER TABEL (WAJIB dipakai untuk JOIN) ===
+master_data_equipment  → equipment
+bad_actor_monitoring   → tag_number
+icu_monitoring         → tag_no
+atg_monitoring         → tag_no_tangki
+metering_monitoring    → tag_number
+boc                    → equipment
+sap_notifications      → equipment
+sap_work_orders        → equipment
+pipeline_inspection    → tag_number
+zero_clamp             → tag_no_ln
+inspection_plan        → tag_no_ln
+irkap_program          → equipment_tag_no
+irkap_actual           → tag_no
+readiness_jetty        → tag_no
+readiness_tank         → tag_number
+readiness_spm          → tag_no
+workplan_jetty         → tag_no
+workplan_tank          → tag_no
+spm_workplan           → tag_no
+critical_eqp_prim_sec  → equipment
+power_stream           → equipment
+doc_tag_links          → tag_number
 
-SAP:
-- sap_notifications(notification, equipment, notif_type, notif_date, system_status, req_start, required_end, description, order_no, functional_loc, location, criticality, planner_group, main_workctr, maint_plant, uploaded_at)
-- sap_work_orders(order_no, equipment, order_type, created_on, bas_start_date, basic_fin_date, actual_finish, actual_release, description, system_status, user_status, functional_loc, location, criticality, planner_group, main_workctr, maint_act_type, total_plan_cost, total_act_cost, priority, notification, po_number, plant)
+=== TABEL MASTER ===
 
-MONITORING:
-- bad_actor_monitoring(tag_number, ru, status, problem, action_plan, progress, target_date, periode, action_plan_category, external_resource, no_irkap, action_plan_remark)
-- icu_monitoring(tag_no, ru, icu_status, issue, mitigation, mitigasi_category, permanent_solution, solution_category, progress, target_closed, report_date, info, remark_mitigation, remark_solution)
-- atg_monitoring(tag_no_tangki, tag_no_atg, refinery_unit, status_atg, status_interkoneksi_atg, cert_no_atg, date_expired_atg, remark, rtl, action_plan_category, status_rtl, month_update)
-- metering_monitoring(tag_number, refinery_unit, status_metering, cert_no_metering, date_expired_metering, remark, rtl, action_plan_category, status_rtl, month_update)
-- boc(equipment, ru, area, unit, grup_equipment, status, frequency, running_hours, mttr, mtbf, hasil)
-- pipeline_inspection(tag_number, refinery_unit, area, unit, fluida_service, nps, from_location, to_location, last_inspection_date, next_inspection_date, last_measured_thickness, rem_life_years, jumlah_temporary_repair, remarks, bulan, tahun)
-- zero_clamp(tag_no_ln, ru, area, unit, services, description, type_damage, posisi, type_perbaikan, tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan, status, remarks, no_irkap)
-- power_stream(equipment, refinery_unit, type_equipment, status_operation, status_n0, unit_measurement, desain, kapasitas_max, average_actual, remark, date_update, month_update)
-- critical_eqp_prim_sec(equipment, refinery_unit, unit_proses, highlight_issue, corrective_action, target_corrective, traffic_corrective, mitigasi_action, target_mitigasi, traffic_mitigasi, month_update)
+master_data_equipment
+  Kolom: equipment (PK, tag number), description, functional_location,
+         maintenance_plant (kode RU: RU2/RU3/RU4/RU5/RU6/RU7),
+         location, criticality (A=sangat kritis, B=kritis, C=kurang kritis, Z=tidak kritis),
+         equipment_category, technical_obj_type, manufacturer, model_type,
+         material, material_description, size_dimension, cost_center, sort_field_ata
 
-INSPECTION:
-- inspection_plan(tag_no_ln, refinery_unit, area, unit, type_equipment, type_inspection, type_pekerjaan, due_date, due_year, plan_date, plan_year, actual_date, actual_year, update_date, result_remaining_life, result_visual, grand_result)
+=== TABEL SAP ===
 
-READINESS:
-- readiness_jetty(tag_no, refinery_unit, area, unit, status_operation, status_tuks, expired_tuks, status_ijin_ops, status_isps, status_struktur, remark_struktur, status_trestle, status_mla, status_fire_protection, month_update)
-- readiness_tank(tag_number, refinery_unit, area, unit, type_tangki, service_tangki, prioritas, status_operational, atg_certification_validity, status_coi, internal_inspection, plan_internal_inspection, status_atg, status_grounding, status_shell_course, status_roof, status_cathodic, month_update)
-- readiness_spm(tag_no, refinery_unit, area, unit, status_operation, status_laik_operasi, expired_laik_operasi, status_ijin_spl, status_mbc, status_lds, status_mooring_hawser, status_floating_hose, status_cathodic_spl, month_update)
+sap_notifications
+  Kolom: notification, equipment, notif_type, notif_date, system_status,
+         req_start, required_end, description, order_no,
+         functional_loc, location, criticality,
+         planner_group, main_workctr, maint_plant, uploaded_at
 
-WORKPLAN:
-- workplan_jetty(tag_no, refinery_unit, area, unit, item, status_item, remark, rtl_action_plan, action_plan_category, target, status_rtl, month_update)
-- workplan_tank(tag_no, unit, item, remark, rtl_action_plan, action_plan_category, target, status_rtl, month_update)
-- spm_workplan(tag_no, refinery_unit, area, unit, item, remark, rtl_action_plan, action_plan_category, target, status_rtl, month_update)
+sap_work_orders
+  Kolom: order_no, equipment, order_type, created_on,
+         bas_start_date, basic_fin_date, actual_finish, actual_release,
+         description, system_status, user_status,
+         functional_loc, location, criticality,
+         planner_group, main_workctr, maint_act_type,
+         total_plan_cost, total_act_cost, priority,
+         notification, po_number, plant
 
-IRKAP:
-- irkap_program(equipment_tag_no, refinery_unit, disiplin, kategori_rkap, no_program_kerja, type_equipment, program_kerja, status_step, status_prognosa, start_plan, finish_plan, nilai_anggaran_idr, nilai_anggaran_usd, top_risk, asset_integrity)
-- irkap_actual(tag_no, no_program, kategori_rkap, program_kerja, refinery_unit, area, disiplin, status_step, status_prognosa, current_step, notif_no, wo_no, pr, po, anggaran_idr, jadwal_pelaksanaan, actual_start1, actual_finish1, actual_start3, actual_finish3, failure_impact, rekomendasi)
+=== TABEL MONITORING ===
 
-DOKUMEN:
-- doc_registry(id, judul, tipe_dokumen, ru, nomor_dokumen, deskripsi, file_name, file_type, status, total_pages, total_chunks, uploaded_at)
-- doc_tag_links(doc_id, tag_number, link_type)
+bad_actor_monitoring
+  Kolom: tag_number, ru, status, problem, action_plan, progress,
+         target_date, periode, action_plan_category,
+         external_resource, no_irkap, action_plan_remark
+
+icu_monitoring
+  Kolom: tag_no, ru, icu_status (contoh: ICU / Non-ICU / Closed),
+         issue, mitigation, mitigasi_category,
+         permanent_solution, solution_category,
+         progress, target_closed, report_date,
+         info, remark_mitigation, remark_solution
+
+atg_monitoring
+  Kolom: tag_no_tangki, tag_no_atg, refinery_unit,
+         status_atg, status_interkoneksi_atg,
+         cert_no_atg, date_expired_atg,
+         remark, rtl, action_plan_category, status_rtl, month_update
+
+metering_monitoring
+  Kolom: tag_number, refinery_unit,
+         status_metering, cert_no_metering, date_expired_metering,
+         remark, rtl, action_plan_category, status_rtl, month_update
+
+boc
+  Kolom: equipment, ru, area, unit, grup_equipment, status,
+         frequency, running_hours, mttr, mtbf,
+         hasil (N+0=tidak ada standby KRITIS, N+1=ada 1 standby,
+                N+2=ada 2 standby, Single=tunggal tanpa grup)
+
+pipeline_inspection
+  Kolom: tag_number, refinery_unit, area, unit, fluida_service, nps,
+         from_location, to_location,
+         last_inspection_date, next_inspection_date,
+         last_measured_thickness, rem_life_years,
+         jumlah_temporary_repair, remarks, bulan, tahun
+
+zero_clamp
+  Kolom: tag_no_ln, ru, area, unit, services, description,
+         type_damage, posisi, type_perbaikan,
+         tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan,
+         status, remarks, no_irkap
+
+power_stream
+  Kolom: equipment, refinery_unit, type_equipment,
+         status_operation, status_n0,
+         unit_measurement, desain, kapasitas_max, average_actual,
+         remark, date_update, month_update
+
+critical_eqp_prim_sec
+  Kolom: equipment, refinery_unit, unit_proses,
+         highlight_issue, corrective_action, target_corrective, traffic_corrective,
+         mitigasi_action, target_mitigasi, traffic_mitigasi, month_update
+
+=== TABEL INSPECTION ===
+
+inspection_plan
+  Kolom: tag_no_ln, refinery_unit, area, unit,
+         type_equipment, type_inspection, type_pekerjaan,
+         due_date, due_year, plan_date, plan_year,
+         actual_date, actual_year, update_date,
+         result_remaining_life, result_visual, grand_result
+
+=== TABEL READINESS ===
+
+readiness_jetty
+  Kolom: tag_no, refinery_unit, area, unit,
+         status_operation, status_tuks, expired_tuks,
+         status_ijin_ops, status_isps, status_struktur, remark_struktur,
+         status_trestle, status_mla, status_fire_protection, month_update
+
+readiness_tank
+  Kolom: tag_number, refinery_unit, area, unit,
+         type_tangki, service_tangki, prioritas, status_operational,
+         atg_certification_validity, status_coi,
+         internal_inspection, plan_internal_inspection,
+         status_atg, status_grounding, status_shell_course,
+         status_roof, status_cathodic, month_update
+
+readiness_spm
+  Kolom: tag_no, refinery_unit, area, unit,
+         status_operation, status_laik_operasi, expired_laik_operasi,
+         status_ijin_spl, status_mbc, status_lds,
+         status_mooring_hawser, status_floating_hose,
+         status_cathodic_spl, month_update
+
+=== TABEL WORKPLAN ===
+
+workplan_jetty
+  Kolom: tag_no, refinery_unit, area, unit,
+         item, status_item, remark,
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+
+workplan_tank
+  Kolom: tag_no, unit, item, remark,
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+
+spm_workplan
+  Kolom: tag_no, refinery_unit, area, unit, item, remark,
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+
+=== TABEL IRKAP ===
+
+irkap_program
+  Kolom: equipment_tag_no (TAG), refinery_unit, disiplin,
+         kategori_rkap, no_program_kerja, type_equipment, program_kerja,
+         status_step, status_prognosa,
+         start_plan, finish_plan,
+         nilai_anggaran_idr, nilai_anggaran_usd,
+         top_risk, asset_integrity
+
+irkap_actual
+  Kolom: tag_no (TAG), no_program, kategori_rkap, program_kerja,
+         refinery_unit, area, disiplin,
+         status_step, status_prognosa, current_step,
+         notif_no, wo_no, pr, po, anggaran_idr,
+         jadwal_pelaksanaan, actual_start1, actual_finish1,
+         actual_start3, actual_finish3,
+         failure_impact, rekomendasi
+
+=== TABEL DOKUMEN ===
+
+doc_registry
+  Kolom: id, judul, tipe_dokumen, ru, nomor_dokumen, deskripsi,
+         file_name, file_type, status, total_pages, total_chunks, uploaded_at
+
+doc_tag_links
+  Kolom: doc_id, tag_number, link_type (manual/auto)
+
+=== CONTOH JOIN QUERY ===
+
+-- Bad actor + ICU monitoring per equipment:
+SELECT m.equipment, m.description, b.status AS bad_actor_status, i.icu_status
+FROM master_data_equipment m
+JOIN bad_actor_monitoring b ON m.equipment = b.tag_number
+JOIN icu_monitoring i ON m.equipment = i.tag_no
+LIMIT 20
+
+-- Equipment critical A yang punya bad actor:
+SELECT m.equipment, m.description, m.criticality, b.status, b.problem
+FROM master_data_equipment m
+JOIN bad_actor_monitoring b ON m.equipment = b.tag_number
+WHERE m.criticality = 'A'
+LIMIT 20
+
+-- IRKAP program + actual per equipment:
+SELECT m.equipment, m.description, p.program_kerja, p.status_prognosa,
+       a.current_step, a.status_step
+FROM master_data_equipment m
+JOIN irkap_program p ON m.equipment = p.equipment_tag_no
+LEFT JOIN irkap_actual a ON m.equipment = a.tag_no AND p.no_program_kerja = a.no_program
+LIMIT 20
+
+-- BOC equipment tanpa standby (N+0) criticality A:
+SELECT m.equipment, m.description, b.hasil, b.mtbf, b.mttr, b.area
+FROM master_data_equipment m
+JOIN boc b ON m.equipment = b.equipment
+WHERE b.hasil = 'N+0' AND m.criticality = 'A'
+LIMIT 20
+
+-- SAP notification + work order terkait:
+SELECT m.equipment, n.notification, n.description AS notif_desc,
+       n.notif_date, w.order_no, w.system_status, w.total_act_cost
+FROM master_data_equipment m
+JOIN sap_notifications n ON m.equipment = n.equipment
+LEFT JOIN sap_work_orders w ON n.order_no = w.notification
+LIMIT 20
+
+-- Zero clamp yang masih terpasang (belum dilepas):
+SELECT m.equipment, m.description, z.area, z.type_damage,
+       z.tanggal_dipasang, z.status
+FROM master_data_equipment m
+JOIN zero_clamp z ON m.equipment = z.tag_no_ln
+WHERE z.tanggal_dilepas IS NULL
+LIMIT 20
+
+-- Jumlah bad actor per RU:
+SELECT ru, COUNT(*) AS jumlah FROM bad_actor_monitoring
+GROUP BY ru ORDER BY jumlah DESC
+
+-- ATG yang sertifikasinya expired:
+SELECT tag_no_tangki, refinery_unit, status_atg, cert_no_atg, date_expired_atg
+FROM atg_monitoring
+WHERE date_expired_atg < CURRENT_DATE
+LIMIT 20
+
+-- Dokumen terkait suatu equipment:
+SELECT d.judul, d.tipe_dokumen, d.ru, d.uploaded_at, t.link_type
+FROM doc_registry d
+JOIN doc_tag_links t ON d.id = t.doc_id
+WHERE t.tag_number = 'XX-XXXX'
+LIMIT 10
+
+=== ATURAN PENTING ===
+- Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
+- LIMIT maksimal 50
+- Gunakan ILIKE untuk pencarian teks (case-insensitive)
+- Filter RU: gunakan kolom refinery_unit ATAU ru ATAU maintenance_plant sesuai tabel
+- JOIN selalu lewat kolom tag sesuai tabel (lihat daftar TAG di atas)
+- Jangan asumsi nilai kolom — gunakan IS NOT NULL atau ILIKE '%keyword%'
 """
 
 NEO4J_SCHEMA_FALLBACK = """
@@ -506,40 +712,18 @@ def handle_sql(message: str, history: list = None) -> dict:
     # Generate SQL
     sql_resp = client.chat.completions.create(
         model=MODEL,
-        max_tokens=400,
+        max_tokens=500,
         messages=[
             {
                 "role": "system",
                 "content": f"""Kamu adalah SQL generator untuk database PostgreSQL Pertamina.
-Berdasarkan skema berikut, generate SQL query yang menjawab pertanyaan user.
+Generate SQL query yang menjawab pertanyaan user berdasarkan schema dan contoh query berikut.
 
-{_get_db_schema()}
+{DB_SCHEMA_FALLBACK}
 
-ATURAN:
-- Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
-- Gunakan LIMIT maksimal 50
-- Gunakan ILIKE untuk pencarian teks
-- Jika filter RU, gunakan kolom refinery_unit atau ru atau maintenance_plant
-- Kembalikan HANYA query SQL, tanpa penjelasan, tanpa markdown backtick
-
-PENTING - kolom tag number berbeda per tabel, gunakan ini saat JOIN:
-- master_data_equipment: equipment
-- bad_actor_monitoring: tag_number
-- icu_monitoring: tag_no
-- atg_monitoring: tag_no_tangki
-- metering_monitoring: tag_number
-- boc: equipment
-- sap_notifications: equipment
-- sap_work_orders: equipment
-- pipeline_inspection: tag_number
-- zero_clamp: tag_no_ln
-- irkap_program: tag_number
-
-Contoh JOIN bad_actor + icu:
-SELECT b.tag_number, b.status, i.icu_status
-FROM bad_actor_monitoring b
-JOIN icu_monitoring i ON b.tag_number = i.tag_no
-LIMIT 20"""
+INSTRUKSI:
+- Ikuti contoh JOIN query di atas sebagai referensi pola yang benar
+- Kembalikan HANYA query SQL, tanpa penjelasan, tanpa markdown backtick"""
             },
             {
                 "role": "user",
