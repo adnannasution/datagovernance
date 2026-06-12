@@ -469,13 +469,14 @@ from neo4j_sync import get_neo4j_stats, full_sync, ensure_constraints, test_conn
 @app.get("/knowledge-graph", response_class=HTMLResponse)
 async def page_knowledge_graph(request: Request):
     from neo4j_sync import TABLE_NEO4J_CONFIG, get_coverage_stats
+    from db_equipment import TABLE_CATALOG
     stats = get_neo4j_stats()
     try:
         coverage = get_coverage_stats()
         coverage_tables = {r["table"]: r for r in coverage.get("tables", [])}
     except Exception:
         coverage_tables = {}
-    # Build sync status per table for graph viz
+    # Build sync status — only tables that can be synced to Neo4j (have tag col)
     table_sync_status = []
     for tname, cfg in TABLE_NEO4J_CONFIG.items():
         ct = coverage_tables.get(tname, {})
@@ -486,10 +487,17 @@ async def page_knowledge_graph(request: Request):
             "connected": ct.get("connected", 0),
             "synced": ct.get("connected", 0) > 0,
         })
+    # Catalog-only tables — exist in TABLE_CATALOG but not in Neo4j (no tag col)
+    neo4j_tables_set = set(TABLE_NEO4J_CONFIG.keys())
+    catalog_only = [
+        t for t in TABLE_CATALOG
+        if t["table"] not in neo4j_tables_set and t["table"] != "doc_registry"
+    ]
     return templates.TemplateResponse(request, "knowledge_graph.html", {
         "stats": stats,
         "neo4j_tables": sorted(TABLE_NEO4J_CONFIG.keys()),
         "table_sync_status": table_sync_status,
+        "catalog_only_tables": catalog_only,
         "title": "Knowledge Graph"
     })
 

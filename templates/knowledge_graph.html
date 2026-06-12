@@ -84,7 +84,7 @@
     <svg id="topo-svg" width="100%" height="420" style="display:block"></svg>
   </div>
 
-  <!-- Table Status List -->
+  <!-- Table Status List: Neo4j syncable tables -->
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
     {% for t in table_sync_status %}
     <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:6px;background:var(--surface2);font-size:.82rem">
@@ -97,6 +97,32 @@
       </div>
     </div>
     {% endfor %}
+  </div>
+
+  <!-- Catalog-only tables (no tag column, not syncable to Neo4j) -->
+  {% if catalog_only_tables %}
+  <div style="margin-top:1rem">
+    <div style="font-size:.8rem;font-weight:600;color:var(--text3);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">
+      Tabel Data (tidak tersinkron ke Graph — tidak memiliki tag equipment)
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem">
+      {% for t in catalog_only_tables %}
+      <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:6px;background:var(--surface2);font-size:.82rem;opacity:0.7">
+        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:#f59e0b"></span>
+        <div>
+          <div style="font-weight:500;color:var(--text)">{{ t.table }}</div>
+          <div style="color:var(--text3);font-size:.75rem">{{ t.domain }} — catalog only</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:.75rem;font-size:.75rem;color:var(--text3);display:flex;gap:1.2rem;flex-wrap:wrap">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:4px"></span>Tersinkron ke Neo4j</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#94a3b8;margin-right:4px"></span>Belum sync</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:4px"></span>Catalog only (tanpa tag)</span>
   </div>
 </div>
 
