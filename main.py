@@ -602,15 +602,17 @@ async def page_chat(request: Request):
 @app.post("/api/chat")
 async def api_chat(request: Request):
     body = await request.json()
-    message  = body.get("message", "").strip()
-    history  = body.get("history", [])
-    filters  = body.get("filters", {})
+    message    = body.get("message", "").strip()
+    history    = body.get("history", [])
+    filters    = body.get("filters", {})
+    session_id = body.get("session_id") or None
 
     if not message:
         raise HTTPException(400, "Message tidak boleh kosong")
 
     try:
-        result = chatbot_chat(message, history=history, filters=filters)
+        result = chatbot_chat(message, history=history, filters=filters,
+                              session_id=session_id)
         return result
     except Exception as e:
         import traceback, logging

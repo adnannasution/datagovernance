@@ -1043,14 +1043,46 @@ Selalu sebutkan sumber dokumen di akhir jawaban."""
         "context_used": context[:500]
     }
 
+# ─── Session Memory ───────────────────────────────────────────────────────────
+
+_session_store: dict = {}
+_SESSION_MAX_MESSAGES = 20
+_SESSION_TTL = 3600  # 1 jam
+
+
+def _get_session_history(session_id: str) -> list:
+    entry = _session_store.get(session_id)
+    if not entry:
+        return []
+    if time.time() - entry["last_active"] > _SESSION_TTL:
+        del _session_store[session_id]
+        return []
+    return entry["history"]
+
+
+def _save_session_history(session_id: str, history: list):
+    _session_store[session_id] = {
+        "history": history[-_SESSION_MAX_MESSAGES:],
+        "last_active": time.time()
+    }
+
+
+def _cleanup_sessions():
+    now = time.time()
+    expired = [sid for sid, e in _session_store.items() if now - e["last_active"] > _SESSION_TTL]
+    for sid in expired:
+        del _session_store[sid]
+
+
 # ─── SQL Handler ──────────────────────────────────────────────────────────────
 
-def handle_sql(message: str, history: list = None) -> dict:
-    """Generate SQL dari pertanyaan, execute, lalu format jawaban."""
-    from db_equipment import get_conn
+def _generate_sql(message: str, previous_sql: str = None, error: str = None) -> str:
+    """Generate SQL, dengan retry context kalau ada error sebelumnya."""
+    extra = ""
+    if previous_sql and error:
+        extra = f"\n\nQuery sebelumnya GAGAL:\n{previous_sql}\nError: {error}\nPerbaiki query tersebut."
 
-    # Generate SQL
-    sql_resp = client.chat.completions.create(
+    resp = client.chat.completions.create(
         model=MODEL,
         max_tokens=500,
         messages=[
@@ -1059,7 +1091,7 @@ def handle_sql(message: str, history: list = None) -> dict:
                 "content": f"""Kamu adalah SQL generator untuk database PostgreSQL Pertamina.
 Generate SQL query yang menjawab pertanyaan user berdasarkan schema dan contoh query berikut.
 
-{DB_SCHEMA_FALLBACK}
+{_get_db_schema()}
 
 INSTRUKSI:
 - Ikuti contoh JOIN query di atas sebagai referensi pola yang benar
@@ -1067,15 +1099,20 @@ INSTRUKSI:
             },
             {
                 "role": "user",
-                "content": message
+                "content": message + extra
             }
         ]
     )
+    sql = resp.choices[0].message.content.strip()
+    return re.sub(r'```sql|```', '', sql).strip()
 
-    sql = sql_resp.choices[0].message.content.strip()
-    sql = re.sub(r'```sql|```', '', sql).strip()
 
-    # Validasi — hanya SELECT
+def handle_sql(message: str, history: list = None) -> dict:
+    """Generate SQL dari pertanyaan, execute, lalu format jawaban. Retry 1x jika gagal."""
+    from db_equipment import get_conn
+
+    sql = _generate_sql(message)
+
     if not sql.upper().startswith("SELECT"):
         return {
             "type": "sql",
@@ -1085,18 +1122,69 @@ INSTRUKSI:
             "error": "Non-SELECT query blocked"
         }
 
-    # Execute
-    try:
-        with get_conn() as conn:
-            rows = conn.execute(sql).fetchall()
-            data = [dict(r) for r in rows]
-    except Exception as e:
+    # Execute — retry 1x jika error
+    data = []
+    last_error = None
+    for attempt in range(2):
+        try:
+            with get_conn() as conn:
+                rows = conn.execute(sql).fetchall()
+                data = [dict(r) for r in rows]
+            last_error = None
+            break
+        except Exception as e:
+            last_error = str(e)
+            if attempt == 0:
+                logging.warning(f"[SQL RETRY] attempt 1 failed: {e}")
+                sql = _generate_sql(message, previous_sql=sql, error=last_error)
+                if not sql.upper().startswith("SELECT"):
+                    break
+
+    if last_error:
         return {
             "type": "sql",
-            "answer": f"Query gagal dijalankan: {str(e)}",
+            "answer": f"Query gagal dijalankan setelah retry: {last_error}",
             "sql": sql,
             "data": [],
-            "error": str(e)
+            "error": last_error
+        }
+
+    if not data:
+        return {
+            "type": "sql",
+            "answer": "Query berhasil dijalankan tapi tidak ada data yang ditemukan.",
+            "sql": sql,
+            "data": [],
+            "error": None
+        }
+
+    data_preview = json.dumps(data[:10], default=str, ensure_ascii=False)
+    fmt_resp = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=600,
+        messages=[
+            {
+                "role": "system",
+                "content": """Kamu adalah asisten data analyst Pertamina.
+Formatkan hasil query database berikut menjadi jawaban yang mudah dibaca dalam Bahasa Indonesia.
+Gunakan bullet points atau tabel teks jika data banyak.
+Sertakan insight singkat jika relevan."""
+            },
+            {
+                "role": "user",
+                "content": f"Pertanyaan: {message}\n\nHasil query ({len(data)} baris):\n{data_preview}"
+            }
+        ]
+    )
+
+    return {
+        "type": "sql",
+        "answer": fmt_resp.choices[0].message.content,
+        "sql": sql,
+        "data": data[:20],
+        "total_rows": len(data),
+        "error": None
+    }
         }
 
     if not data:
@@ -1274,23 +1362,46 @@ Jawab secara terstruktur dan informatif."""
             except Exception:
                 pass  # Fall back to Cypher generation
 
-        # Generate Cypher (fallback or no tag)
-        cypher_resp = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=300,
-            messages=[
-                {"role": "system", "content": _get_cypher_prompt()},
-                {"role": "user", "content": message}
-            ]
-        )
+        # Generate Cypher (fallback or no tag) — retry 1x jika error
+        def _run_cypher(prev_cypher=None, error=None):
+            extra = ""
+            if prev_cypher and error:
+                extra = f"\n\nQuery sebelumnya GAGAL:\n{prev_cypher}\nError: {error}\nPerbaiki query tersebut."
+            resp = client.chat.completions.create(
+                model=MODEL,
+                max_tokens=300,
+                messages=[
+                    {"role": "system", "content": _get_cypher_prompt()},
+                    {"role": "user", "content": message + extra}
+                ]
+            )
+            q = resp.choices[0].message.content.strip()
+            return re.sub(r'```cypher|```', '', q).strip()
 
-        cypher = cypher_resp.choices[0].message.content.strip()
-        cypher = re.sub(r'```cypher|```', '', cypher).strip()
+        cypher = _run_cypher()
+        data = []
+        last_error = None
+        for attempt in range(2):
+            try:
+                with get_driver() as driver:
+                    with driver.session() as session:
+                        data = [dict(r) for r in session.run(cypher)]
+                last_error = None
+                break
+            except Exception as e:
+                last_error = str(e)
+                if attempt == 0:
+                    logging.warning(f"[CYPHER RETRY] attempt 1 failed: {e}")
+                    cypher = _run_cypher(prev_cypher=cypher, error=last_error)
 
-        with get_driver() as driver:
-            with driver.session() as session:
-                result = session.run(cypher)
-                data = [dict(r) for r in result]
+        if last_error:
+            return {
+                "type": "graph",
+                "answer": f"Query Knowledge Graph gagal setelah retry: {last_error}",
+                "cypher": cypher,
+                "data": [],
+                "error": last_error
+            }
 
         if not data:
             # Fallback ke SQL jika tag terdeteksi tapi tidak ada di graph
@@ -1433,16 +1544,23 @@ Jawab dalam Bahasa Indonesia. Singkat dan helpful."""
 
 # ─── Main Chat Function ───────────────────────────────────────────────────────
 
-def chat(message: str, history: list = None, filters: dict = None) -> dict:
+def chat(message: str, history: list = None, filters: dict = None,
+         session_id: str = None) -> dict:
     """
     Entry point utama. Router ke handler yang tepat.
-    history: list of {role, content}
-    filters: {ru, tag_number}
+    history   : list of {role, content} dari frontend (opsional)
+    filters   : {ru, tag_number}
+    session_id: untuk server-side session memory
     """
-    if not history:
+    # Ambil history dari server jika ada session_id
+    if session_id:
+        server_history = _get_session_history(session_id)
+        # Gabungkan: server history + frontend history (hindari duplikat)
+        history = server_history if server_history else (history or [])
+    elif not history:
         history = []
 
-    # Layer 1: Rewrite — normalisasi pertanyaan sebelum diproses
+    # Layer 1: Rewrite — normalisasi pertanyaan
     clean_message = rewrite_query(message, history)
 
     intent = detect_intent(clean_message, history)
@@ -1458,7 +1576,16 @@ def chat(message: str, history: list = None, filters: dict = None) -> dict:
     else:
         result = handle_general(clean_message, history)
 
+    # Simpan ke session memory
+    if session_id:
+        history = history + [
+            {"role": "user",      "content": message},
+            {"role": "assistant", "content": result.get("answer", "")}
+        ]
+        _save_session_history(session_id, history)
+        _cleanup_sessions()
+
     result["intent"] = intent
     result["message"] = message
-    result["rewritten"] = clean_message  # debug: tampilkan hasil rewrite
+    result["rewritten"] = clean_message
     return result
