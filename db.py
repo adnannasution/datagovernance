@@ -221,23 +221,23 @@ def vector_search(query_embedding: list[float], ru=None, tipe=None,
                   tag_number=None, limit=10, threshold=0.4):
     emb_str = '[' + ','.join(map(str, query_embedding)) + ']'
     filters = ["d.status = 'ready'", "1 - (c.embedding <=> %s::vector) >= %s"]
-    where_params = [emb_str, threshold]
+    extra_params = []
 
     if ru:
-        filters.append("d.ru = %s"); where_params.append(ru)
+        filters.append("d.ru = %s"); extra_params.append(ru)
     if tipe:
-        filters.append("d.tipe_dokumen = %s"); where_params.append(tipe)
+        filters.append("d.tipe_dokumen = %s"); extra_params.append(tipe)
 
     join_tag = ""
     if tag_number:
         join_tag = "JOIN doc_tag_links t ON t.doc_id = d.id"
         filters.append("t.tag_number = %s")
-        where_params.append(tag_number.upper())
+        extra_params.append(tag_number.upper())
 
     where = "WHERE " + " AND ".join(filters)
 
-    # Final params: WHERE params + score SELECT embedding + ORDER BY embedding + LIMIT
-    final_params = where_params + [emb_str, emb_str, limit]
+    # SQL %s order: SELECT emb, WHERE emb, WHERE threshold, extra_filters, ORDER emb, LIMIT
+    final_params = [emb_str, emb_str, threshold] + extra_params + [emb_str, limit]
 
     with get_conn() as conn:
         return conn.execute(f"""
