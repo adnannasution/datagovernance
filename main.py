@@ -376,30 +376,44 @@ async def page_catalog(request: Request, domain: str = ""):
     })
 
 @app.get("/catalog/{table_name}", response_class=HTMLResponse)
-async def page_table_detail(request: Request, table_name: str,
-                             search: str = "", page: int = 1):
+async def page_table_detail(request: Request, table_name: str):
     tbl_meta = next((t for t in TABLE_CATALOG if t["table"] == table_name), None)
     if not tbl_meta:
         raise HTTPException(404, "Tabel tidak ditemukan")
-    limit = 25
-    offset = (page - 1) * limit
     cols = get_table_columns(table_name)
-    rows, total = get_table_rows(table_name, search=search or None,
-                                  limit=limit, offset=offset)
     quality = get_data_quality(table_name, tbl_meta.get("tag_col"))
     return templates.TemplateResponse(request, "table_detail.html", {
         "tbl": tbl_meta,
         "cols": cols,
-        "rows": rows,
-        "total": total,
-        "page": page,
-        "total_pages": (total + limit - 1) // limit,
-        "offset": offset,
-        "limit": limit,
-        "search": search,
         "quality": quality,
         "title": tbl_meta["label"]
     })
+
+@app.get("/api/table/{table_name}/rows")
+async def api_table_rows(table_name: str, page: int = 1, limit: int = 10,
+                          search: str = "", sort_col: str = "", sort_dir: str = "asc"):
+    tbl_meta = next((t for t in TABLE_CATALOG if t["table"] == table_name), None)
+    if not tbl_meta:
+        raise HTTPException(404, "Tabel tidak ditemukan")
+    limit = max(1, min(limit, 200))
+    offset = (page - 1) * limit
+    rows, total = get_table_rows(
+        table_name,
+        search=search or None,
+        limit=limit,
+        offset=offset,
+        sort_col=sort_col or None,
+        sort_dir=sort_dir
+    )
+    total_pages = (total + limit - 1) // limit if total > 0 else 1
+    return {
+        "rows": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+        "limit": limit,
+        "offset": offset
+    }
 
 @app.get("/equipment", response_class=HTMLResponse)
 async def page_equipment_list(request: Request, q: str = "", plant: str = ""):

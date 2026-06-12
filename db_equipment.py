@@ -103,10 +103,13 @@ def get_table_sample(table_name: str, limit: int = 10) -> list:
             return []
 
 def get_table_rows(table_name: str, search: str = None,
-                   limit: int = 50, offset: int = 0) -> tuple:
-    """Browse data tabel dengan search dan pagination."""
+                   limit: int = 10, offset: int = 0,
+                   sort_col: str = None, sort_dir: str = "asc") -> tuple:
+    """Browse data tabel dengan search, pagination, dan sorting."""
+    import re
     with get_conn() as conn:
         cols = get_table_columns(table_name)
+        col_names = [c["column_name"] for c in cols]
         text_cols = [c["column_name"] for c in cols
                      if "char" in c["data_type"] or "text" in c["data_type"]]
 
@@ -117,12 +120,17 @@ def get_table_rows(table_name: str, search: str = None,
             where = "WHERE " + " OR ".join(conditions)
             params = [f"%{search}%"] * len(conditions)
 
+        order = ""
+        if sort_col and sort_col in col_names:
+            direction = "DESC" if sort_dir and sort_dir.lower() == "desc" else "ASC"
+            order = f'ORDER BY "{sort_col}" {direction}'
+
         try:
             total = conn.execute(
                 f"SELECT COUNT(*) as n FROM {table_name} {where}", params
             ).fetchone()["n"]
             rows = conn.execute(
-                f"SELECT * FROM {table_name} {where} LIMIT %s OFFSET %s",
+                f"SELECT * FROM {table_name} {where} {order} LIMIT %s OFFSET %s",
                 params + [limit, offset]
             ).fetchall()
             return list(rows), total
