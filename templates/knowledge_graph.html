@@ -147,6 +147,23 @@
       'stroke-dasharray': t.synced ? 'none' : '4,3',
       opacity: t.synced ? '0.7' : '0.3'
     }));
+
+    // Label nama relasi di tengah garis (hanya kalau synced)
+    if (t.synced && t.rel) {
+      const mx = (cx + nx) / 2;
+      const my = (cy + ny) / 2;
+      // Background putih kecil biar mudah dibaca
+      svg.appendChild(el('rect', {
+        x: mx - 28, y: my - 7, width: 56, height: 10,
+        fill: 'var(--surface, #1e293b)', rx: 3, opacity: '0.75'
+      }));
+      svg.appendChild(el('text', {
+        x: mx, y: my + 2,
+        'text-anchor': 'middle', 'font-size': '7',
+        fill: color, 'font-family': 'Inter, monospace',
+        'font-weight': '600', opacity: '0.9'
+      }, t.rel));
+    }
   });
 
   // Draw table nodes
