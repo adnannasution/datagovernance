@@ -654,6 +654,9 @@ async def page_chat(request: Request):
 
 @app.post("/api/chat")
 async def api_chat(request: Request):
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
     body = await request.json()
     message    = body.get("message", "").strip()
     history    = body.get("history", [])
@@ -664,9 +667,25 @@ async def api_chat(request: Request):
         raise HTTPException(400, "Message tidak boleh kosong")
 
     try:
-        result = chatbot_chat(message, history=history, filters=filters,
-                              session_id=session_id)
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: chatbot_chat(message, history=history, filters=filters,
+                                     session_id=session_id)
+            ),
+            timeout=120.0
+        )
         return result
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=200, content={
+            "answer": (
+                "Maaf, permintaan membutuhkan waktu terlalu lama dan terpaksa dibatalkan.\n\n"
+                "Coba sederhanakan pertanyaan atau tanyakan hal yang lebih spesifik."
+            ),
+            "intent": "error",
+            "error": "timeout",
+        })
     except Exception as e:
         import traceback, logging
         logging.error(f"[CHAT ERROR] {e}\n{traceback.format_exc()}")
