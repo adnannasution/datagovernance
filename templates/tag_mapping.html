@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 
+<!-- Mapping Notification Banner -->
+<div id="mapping-notif-banner" style="display:none;position:fixed;top:16px;right:16px;z-index:9999;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,0.15);border-radius:10px;overflow:hidden">
+  <div id="mapping-notif-inner" style="padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
+    <span id="mapping-notif-icon" style="font-size:20px;flex-shrink:0;margin-top:1px"></span>
+    <div style="flex:1;min-width:0">
+      <div id="mapping-notif-title" style="font-weight:600;font-size:14px;margin-bottom:2px"></div>
+      <div id="mapping-notif-body" style="font-size:12px;opacity:0.85;line-height:1.5"></div>
+    </div>
+    <button onclick="closeMappingBanner()" style="background:none;border:none;cursor:pointer;font-size:16px;opacity:0.6;flex-shrink:0;padding:0;line-height:1">×</button>
+  </div>
+</div>
+
 {# ── Stats bar ─────────────────────────────────────────────────── #}
 <div class="stats-grid" style="margin-bottom:1.5rem">
   <div class="stat-card">
@@ -229,6 +241,92 @@
 
 {% block scripts %}
 <script>
+// ── Mapping generation localStorage flag ──────────────────────────
+const MAPPING_FLAG_KEY = 'mappingPending';
+
+function markMappingStarted() {
+  localStorage.setItem(MAPPING_FLAG_KEY, JSON.stringify({ startedAt: Date.now() }));
+}
+
+function closeMappingBanner() {
+  const b = document.getElementById('mapping-notif-banner');
+  if (b) b.style.display = 'none';
+}
+
+function showMappingBanner(title, body, success) {
+  const banner = document.getElementById('mapping-notif-banner');
+  const inner  = document.getElementById('mapping-notif-inner');
+  document.getElementById('mapping-notif-icon').textContent  = success ? '✅' : '⚠️';
+  document.getElementById('mapping-notif-title').textContent = title;
+  document.getElementById('mapping-notif-body').innerHTML    = body;
+  inner.style.background = success ? '#f0fdf4' : '#fff8e1';
+  inner.style.color      = success ? '#166534' : '#78350f';
+  banner.style.display   = 'block';
+  setTimeout(closeMappingBanner, 12000);
+}
+
+function formatDur(ms) {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s} detik` : `${Math.floor(s/60)} menit ${s%60} detik`;
+}
+
+async function checkMappingOnLoad() {
+  const raw = localStorage.getItem(MAPPING_FLAG_KEY);
+  if (!raw) return;
+  let pending;
+  try { pending = JSON.parse(raw); } catch { localStorage.removeItem(MAPPING_FLAG_KEY); return; }
+
+  try {
+    const sr = await fetch('/api/tag-mapping/status');
+    const sd = await sr.json();
+
+    if (sd.running) {
+      // Masih berjalan — resume polling
+      resumeMappingPoll();
+      showMappingBanner('Generate Tag Mapping Masih Berjalan', 'Proses generate kandidat masih berjalan di server...', true);
+    } else if (sd.last_result !== null) {
+      localStorage.removeItem(MAPPING_FLAG_KEY);
+      const dur = pending.startedAt ? ` (durasi ±${formatDur(Date.now() - pending.startedAt)})` : '';
+      const total = Object.values(sd.last_result || {}).reduce((s, t) => s + (t.total || 0), 0);
+      const errors = Object.values(sd.last_result || {}).filter(t => t.error).length;
+      const ok = errors === 0;
+      showMappingBanner(
+        ok ? 'Generate Tag Mapping Selesai' : 'Generate Tag Mapping Selesai (ada error)',
+        `${total.toLocaleString()} tag diproses, ${errors} error${dur}. Halaman ini sudah menampilkan hasil terbaru.`,
+        ok
+      );
+    }
+  } catch(e) { /* server mungkin restart */ }
+}
+
+function resumeMappingPoll() {
+  const status = document.getElementById('generate-status');
+  const bar    = document.getElementById('progress-bar');
+  const progress = document.getElementById('generate-progress');
+  const btn    = document.getElementById('btn-generate');
+  if (progress) progress.style.display = 'block';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Berjalan...'; }
+
+  const poll = setInterval(async () => {
+    try {
+      const sr = await fetch('/api/tag-mapping/status');
+      const sd = await sr.json();
+      if (sd.current_table && status) status.textContent = `Sedang proses: ${sd.current_table}...`;
+      if (!sd.running) {
+        clearInterval(poll);
+        localStorage.removeItem(MAPPING_FLAG_KEY);
+        if (bar) bar.style.width = '100%';
+        if (btn) { btn.disabled = false; btn.textContent = '⚙ Generate Semua Tabel'; }
+        const total = Object.values(sd.last_result || {}).reduce((s, t) => s + (t.total || 0), 0);
+        if (status) status.textContent = `Selesai — ${total.toLocaleString()} tag diproses.`;
+        showMappingBanner('Generate Tag Mapping Selesai', `${total.toLocaleString()} tag diproses. Reload untuk melihat hasil terbaru.`, true);
+      }
+    } catch(e) {}
+  }, 3000);
+}
+
+document.addEventListener('DOMContentLoaded', checkMappingOnLoad);
+
 // ── Generate kandidat ──────────────────────────────────────────────
 async function generateKandidats(sourceTable) {
   const btn = document.getElementById('btn-generate');
@@ -243,13 +341,15 @@ async function generateKandidats(sourceTable) {
   progress.style.display = 'block';
   bar.style.width = '10%';
 
+  markMappingStarted();
+
   try {
     const url = sourceTable
       ? `/api/tag-mapping/generate?source_table=${encodeURIComponent(sourceTable)}`
       : '/api/tag-mapping/generate';
     const res = await fetch(url, { method: 'POST' });
     if (!res.ok) throw new Error(await res.text());
-    status.textContent = `Generate ${label} berjalan di background...`;
+    status.textContent = `Generate ${label} berjalan di background — aman tutup halaman ini.`;
     bar.style.width = '30%';
 
     // Poll status
@@ -259,19 +359,19 @@ async function generateKandidats(sourceTable) {
         const sd = await sr.json();
         if (sd.current_table) {
           status.textContent = `Sedang proses: ${sd.current_table}...`;
-          // Animate bar
           const cur = parseFloat(bar.style.width) || 30;
           if (cur < 90) bar.style.width = (cur + 2) + '%';
         }
         if (!sd.running) {
           clearInterval(poll);
+          localStorage.removeItem(MAPPING_FLAG_KEY);
           bar.style.width = '100%';
           btn.disabled = false;
           btn.textContent = '⚙ Generate Semua Tabel';
-          const res = sd.last_result;
-          if (res) {
-            const total = Object.values(res).reduce((s, t) => s + (t.total || 0), 0);
-            status.textContent = `Selesai — ${total} tag diproses. Reload untuk melihat hasil.`;
+          const result = sd.last_result;
+          if (result) {
+            const total = Object.values(result).reduce((s, t) => s + (t.total || 0), 0);
+            status.textContent = `Selesai — ${total.toLocaleString()} tag diproses. Reload untuk melihat hasil.`;
           } else {
             status.textContent = 'Selesai.';
           }
@@ -280,6 +380,7 @@ async function generateKandidats(sourceTable) {
     }, 3000);
 
   } catch(e) {
+    localStorage.removeItem(MAPPING_FLAG_KEY);
     status.textContent = 'Error: ' + e.message;
     btn.disabled = false;
     btn.textContent = '⚙ Generate Semua Tabel';
