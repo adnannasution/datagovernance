@@ -369,6 +369,11 @@ def sync_table(table_name: str, tag_col: str, neo4j_label: str, rel_type: str, b
                     if raw_tag is not None:
                         row_dict[tag_col] = tag_mapping.get(raw_tag, raw_tag)
 
+                    # Skip rows with null or empty tag — Neo4j cannot MERGE on null key
+                    resolved_tag = row_dict.get(tag_col)
+                    if not resolved_tag or str(resolved_tag).strip() == "":
+                        continue
+
                     batch.append(row_dict)
 
                 # Build cypher - label must be interpolated (comes from our config, not user input)
