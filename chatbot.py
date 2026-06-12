@@ -68,6 +68,31 @@ CATEGORICAL_COLUMNS = [
     ("power_stream",                "type_equipment"),
     ("critical_eqp_prim_sec",       "traffic_corrective"),
     ("critical_eqp_prim_sec",       "traffic_mitigasi"),
+    # Tabel baru
+    ("rotor_monitoring",            "status_readiness_spare"),
+    ("rotor_monitoring",            "status_workplan"),
+    ("rotor_monitoring",            "action_plan_category"),
+    ("paf",                         "ru"),
+    ("paf",                         "type"),
+    ("paf",                         "plan_unplan"),
+    ("issue_paf",                   "type"),
+    ("issue_paf",                   "ru"),
+    ("jumlah_eqp_utl",              "status_equipment"),
+    ("jumlah_eqp_utl",              "type_equipment"),
+    ("critical_eqp_utl",            "traffic_corrective"),
+    ("critical_eqp_utl",            "traffic_mitigasi"),
+    ("monitoring_operasi",          "refinery_unit"),
+    ("anggaran_maintenance",        "ru"),
+    ("anggaran_maintenance",        "kategori"),
+    ("anggaran_maintenance",        "tipe"),
+    ("rcps",                        "kilang"),
+    ("rcps",                        "traffic"),
+    ("rcps",                        "disiplin"),
+    ("rcps_rekomendasi",            "kilang"),
+    ("rcps_rekomendasi",            "traffic"),
+    ("rcps_rekomendasi",            "recommendation_category"),
+    ("program_kerja_atg",           "refinery_unit"),
+    ("program_kerja_atg",           "action_plan_category"),
 ]
 
 _categorical_cache: dict = {}
@@ -239,6 +264,18 @@ spm_workplan           → tag_no
 critical_eqp_prim_sec  → equipment
 power_stream           → equipment
 doc_tag_links          → tag_number
+-- Tabel berikut tidak punya kolom tag (agregat/operasional) --
+anggaran_maintenance   → filter by ru, tahun, kategori
+rotor_monitoring       → filter by refinery_unit, bulan
+program_kerja_atg      → filter by refinery_unit
+paf                    → filter by ru, type, month_update
+issue_paf              → filter by ru, type, month_update
+jumlah_eqp_utl         → filter by refinery_unit, type_equipment
+critical_eqp_utl       → filter by refinery_unit, type_equipment
+monitoring_operasi     → filter by refinery_unit, unit_proses
+tkdn                   → filter by refinery_unit, tahun, bulan
+rcps                   → filter by kilang, disiplin, traffic
+rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
 
 === TABEL MASTER ===
 
@@ -386,6 +423,69 @@ irkap_actual
          jadwal_pelaksanaan, actual_start1, actual_finish1,
          actual_start3, actual_finish3,
          failure_impact, rekomendasi
+
+=== TABEL OPERASI ===
+
+paf
+  Kolom: ru, type, target_realisasi, value, plan_unplan, type2, month, value2,
+         ru2, target, month_update
+  Catatan: PAF = Plant Availability Factor, indikator ketersediaan kilang
+
+issue_paf
+  Kolom: type, ru, date, issue, month_update
+  Catatan: Isu yang mempengaruhi PAF per kilang
+
+monitoring_operasi
+  Kolom: refinery_unit, unit_proses, unit, design, minimal_capacity,
+         plant_readiness, actual, type_limitasi_process, equipment_process,
+         limitasi_alert_process, mitigasi_process, target_sts, actual,
+         type_limitasi_sts, equipment_sts, mitigasi_sts, month_update
+  Catatan: Monitoring kapasitas dan limitasi operasi per unit proses
+
+jumlah_eqp_utl
+  Kolom: refinery_unit, type_equipment, status_equipment, jumlah, month_update
+  Catatan: Rekap jumlah equipment utilitas per status per RU
+
+critical_eqp_utl
+  Kolom: refinery_unit, type_equipment, highlight_issue, corrective_action,
+         target_corrective, traffic_corrective, mitigasi_action,
+         target_mitigasi, traffic_mitigasi, month_update
+  Catatan: Equipment kritis utilitas dengan highlight isu dan tindakan
+
+rotor_monitoring
+  Kolom: refinery_unit, bulan, rotor, program, brand,
+         status_readiness_spare, status_workplan, detail_status_workplan,
+         keterangan, action_plan_category, no_irkap,
+         finish_date_eksekusi, readiness_rotor, last_update
+  Catatan: Monitoring kesiapan rotor dan spare per RU
+
+program_kerja_atg
+  Kolom: refinery_unit, type, atg_eksisting, program_2024, prokja,
+         action_plan_category, no_irkap, target, month_update
+  Catatan: Program kerja pemasangan/perbaikan ATG
+
+=== TABEL KEUANGAN ===
+
+anggaran_maintenance
+  Kolom: ru, tahun, kategori, tipe, nilai_usd
+  Catatan: Rekap anggaran maintenance per RU per tahun per kategori
+
+tkdn
+  Kolom: refinery_unit, bulan, nominal, kdn, persentase, tahun
+  Catatan: TKDN = Tingkat Komponen Dalam Negeri, persentase penggunaan produk lokal
+
+=== TABEL RCPS ===
+
+rcps
+  Kolom: kilang, traffic, sum_of_progress, link, disiplin, date,
+         judul_rcps, rcps_no, criticallity
+  Catatan: Root Cause Problem Solving per kilang
+
+rcps_rekomendasi
+  Kolom: kilang, rcps_no, judul_rcps, rekomendasi, description,
+         traffic, pic, target, recommendation_category,
+         no_irkap, remark
+  Catatan: Rekomendasi hasil RCPS yang harus ditindaklanjuti
 
 === TABEL DOKUMEN ===
 
@@ -578,6 +678,36 @@ petakan ke kolom yang relevan dan gunakan ILIKE '%nilai%':
 "sertifikat" / "sertifikasi" / "perizinan"
   → atg_monitoring.cert_no_atg + date_expired_atg,
     metering_monitoring.cert_no_metering + date_expired_metering
+
+"PAF" / "plant availability" / "ketersediaan kilang" / "availability"
+  → paf (target vs value, plan vs unplan per RU)
+
+"isu PAF" / "gangguan operasi" / "penyebab unplanned"
+  → issue_paf (issue per RU per bulan)
+
+"kapasitas" / "limitasi" / "plant readiness" / "kapasitas operasi"
+  → monitoring_operasi (design, minimal_capacity, actual, plant_readiness)
+
+"rotor" / "spare rotor" / "kesiapan rotor"
+  → rotor_monitoring (status_readiness_spare, status_workplan, readiness_rotor)
+
+"ATG program" / "program ATG" / "rencana pasang ATG"
+  → program_kerja_atg
+
+"anggaran maintenance" / "budget maintenance" / "biaya perawatan"
+  → anggaran_maintenance (nilai_usd per ru/tahun/kategori)
+
+"TKDN" / "komponen dalam negeri" / "lokal konten"
+  → tkdn (persentase, nominal, kdn per refinery_unit/tahun)
+
+"RCPS" / "root cause" / "analisis akar masalah"
+  → rcps + rcps_rekomendasi
+
+"rekomendasi RCPS" / "tindak lanjut RCPS"
+  → rcps_rekomendasi (rekomendasi, traffic, pic, target)
+
+"utilitas" / "equipment utilitas"
+  → jumlah_eqp_utl + critical_eqp_utl
 
 "tanpa standby" / "single" / "tidak ada cadangan"
   → boc.hasil = 'N+0' ATAU boc.hasil = 'Single'

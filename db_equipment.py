@@ -34,6 +34,14 @@ TABLE_CATALOG = [
     {"table": "zero_clamp",              "domain": "Monitoring",  "tag_col": "tag_no_ln",        "label": "Zero Clamp"},
     {"table": "power_stream",            "domain": "Monitoring",  "tag_col": "equipment",        "label": "Power & Stream"},
     {"table": "critical_eqp_prim_sec",   "domain": "Monitoring",  "tag_col": "equipment",        "label": "Critical Equipment"},
+    {"table": "rotor_monitoring",        "domain": "Monitoring",  "tag_col": None,               "label": "Rotor Monitoring"},
+    {"table": "program_kerja_atg",       "domain": "Monitoring",  "tag_col": None,               "label": "Program Kerja ATG"},
+    # Operasi
+    {"table": "paf",                     "domain": "Operasi",     "tag_col": None,               "label": "PAF (Plant Availability Factor)"},
+    {"table": "issue_paf",               "domain": "Operasi",     "tag_col": None,               "label": "Issue PAF"},
+    {"table": "monitoring_operasi",      "domain": "Operasi",     "tag_col": None,               "label": "Monitoring Operasi"},
+    {"table": "jumlah_eqp_utl",          "domain": "Operasi",     "tag_col": None,               "label": "Jumlah Equipment Utilitas"},
+    {"table": "critical_eqp_utl",        "domain": "Operasi",     "tag_col": None,               "label": "Critical Equipment Utilitas"},
     # Inspection
     {"table": "inspection_plan",         "domain": "Inspection",  "tag_col": "tag_no_ln",        "label": "Inspection Plan"},
     # Readiness
@@ -47,11 +55,17 @@ TABLE_CATALOG = [
     # IRKAP
     {"table": "irkap_program",           "domain": "IRKAP",       "tag_col": "equipment_tag_no", "label": "IRKAP Program"},
     {"table": "irkap_actual",            "domain": "IRKAP",       "tag_col": "tag_no",           "label": "IRKAP Actual"},
+    # Keuangan
+    {"table": "anggaran_maintenance",    "domain": "Keuangan",    "tag_col": None,               "label": "Anggaran Maintenance"},
+    {"table": "tkdn",                    "domain": "Keuangan",    "tag_col": None,               "label": "TKDN"},
+    # RCPS
+    {"table": "rcps",                    "domain": "RCPS",        "tag_col": None,               "label": "RCPS"},
+    {"table": "rcps_rekomendasi",        "domain": "RCPS",        "tag_col": None,               "label": "RCPS Rekomendasi"},
     # Dokumen
     {"table": "doc_registry",            "domain": "Dokumen",     "tag_col": None,               "label": "Document Registry"},
 ]
 
-DOMAIN_ORDER = ["Master", "SAP", "Monitoring", "Inspection", "Readiness", "Workplan", "IRKAP", "Dokumen"]
+DOMAIN_ORDER = ["Master", "SAP", "Monitoring", "Inspection", "Readiness", "Workplan", "IRKAP", "Operasi", "Keuangan", "RCPS", "Dokumen"]
 
 # ─── DATA CATALOG ─────────────────────────────────────────────────────────────
 
