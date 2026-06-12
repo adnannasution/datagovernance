@@ -322,9 +322,14 @@
 <div class="card mt-lg">
   <div class="card-title">Graph Visualisasi Equipment</div>
   <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap">
-    <input type="text" id="graph-tag-input" placeholder="Masukkan tag number, contoh: 4B-P-001"
-      style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px"
-      onkeydown="if(event.key==='Enter') loadGraph()" />
+    <div style="flex:1;min-width:220px;position:relative">
+      <input type="text" id="graph-tag-input" placeholder="Cari tag number atau nama equipment..."
+        style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px;box-sizing:border-box"
+        oninput="onTagInput(this.value)"
+        onkeydown="onTagKeydown(event)"
+        autocomplete="off" />
+      <div id="tag-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.3);max-height:220px;overflow-y:auto;margin-top:2px"></div>
+    </div>
     <button class="btn btn-primary" onclick="loadGraph()">Tampilkan Graph</button>
     <button class="btn" onclick="clearGraph()" style="font-size:12px">Clear</button>
     <button class="btn" onclick="exportPNG()" id="export-btn" style="font-size:12px" disabled>Export PNG</button>
@@ -706,8 +711,78 @@ function getColor(group) {
   return GROUP_COLORS[group] || '#95A5A6';
 }
 
+// ── Tag Autocomplete ─────────────────────────────────────────────────────────
+let _tagDropdownItems = [];
+let _tagDropdownIdx = -1;
+let _tagSearchTimer = null;
+
+async function onTagInput(val) {
+  clearTimeout(_tagSearchTimer);
+  const dd = document.getElementById('tag-dropdown');
+  if (!val || val.length < 1) { dd.style.display = 'none'; return; }
+  _tagSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/neo4j/tags/search?q=${encodeURIComponent(val)}&limit=15`);
+      const data = await res.json();
+      _tagDropdownItems = data.tags || [];
+      _tagDropdownIdx = -1;
+      if (!_tagDropdownItems.length) { dd.style.display = 'none'; return; }
+      dd.innerHTML = _tagDropdownItems.map((t, i) => `
+        <div class="tag-dd-item" data-idx="${i}" onclick="selectTagItem(${i})"
+          style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px">
+          <span style="font-weight:600;color:var(--text1)">${t.tag}</span>
+          <span style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px">${t.desc}</span>
+        </div>`).join('');
+      dd.style.display = 'block';
+    } catch(e) { dd.style.display = 'none'; }
+  }, 250);
+}
+
+function onTagKeydown(e) {
+  const dd = document.getElementById('tag-dropdown');
+  const items = dd.querySelectorAll('.tag-dd-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _tagDropdownIdx = Math.min(_tagDropdownIdx + 1, items.length - 1);
+    items.forEach((el, i) => el.style.background = i === _tagDropdownIdx ? 'var(--surface2)' : '');
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _tagDropdownIdx = Math.max(_tagDropdownIdx - 1, -1);
+    items.forEach((el, i) => el.style.background = i === _tagDropdownIdx ? 'var(--surface2)' : '');
+  } else if (e.key === 'Enter') {
+    if (_tagDropdownIdx >= 0 && _tagDropdownItems[_tagDropdownIdx]) {
+      selectTagItem(_tagDropdownIdx);
+    } else {
+      closeTagDropdown();
+      loadGraph();
+    }
+  } else if (e.key === 'Escape') {
+    closeTagDropdown();
+  }
+}
+
+function selectTagItem(idx) {
+  const t = _tagDropdownItems[idx];
+  if (!t) return;
+  document.getElementById('graph-tag-input').value = t.tag;
+  closeTagDropdown();
+  loadGraph();
+}
+
+function closeTagDropdown() {
+  document.getElementById('tag-dropdown').style.display = 'none';
+}
+
+// Tutup dropdown kalau klik di luar
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#graph-tag-input') && !e.target.closest('#tag-dropdown')) {
+    closeTagDropdown();
+  }
+});
+
 async function loadGraph() {
   const tag = document.getElementById('graph-tag-input').value.trim();
+  closeTagDropdown();
   if (!tag) return;
 
   const depth = document.querySelector('input[name="graph-depth"]:checked').value;
