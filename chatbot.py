@@ -603,7 +603,10 @@ petakan ke kolom yang relevan dan gunakan ILIKE '%nilai%':
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
 - LIMIT maksimal 50
 - SELALU gunakan ILIKE '%nilai%' untuk pencarian nilai teks — jangan exact match
-- Filter RU: coba kolom refinery_unit, ru, maintenance_plant (tergantung tabel)
+- Filter RU/kilang/plant: gunakan kolom refinery_unit (nilai: 'RU II','RU III','RU IV','RU V','RU VI','RU VII'),
+  kolom ru (nilai: 'RU II','RU III', dst), atau maintenance_plant (nilai: 'RU2','RU3','RU4','RU5','RU6','RU7') — tergantung tabel
+- Kata "kilang", "plant", "refinery", "RU" semuanya merujuk hal yang sama → filter kolom yang sesuai per tabel
+- Gunakan ILIKE '%RU IV%' atau ILIKE '%RU4%' sesuai format kolom di tabel yang bersangkutan
 - JOIN selalu lewat kolom tag sesuai tabel (lihat daftar TAG di atas)
 - Jika istilah ambigu, cari di semua kolom status yang relevan sekaligus dengan OR
 - Jangan tanya nama tabel/kolom ke user — petakan sendiri dari konteks
@@ -920,13 +923,14 @@ PANDUAN NORMALISASI:
    "yang itu detail dong" + history ada tag XX-XXXX
    → "Tampilkan detail lengkap equipment XX-XXXX"
 
-3. NORMALISASI nama RU ke bentuk lengkap:
-   RU II / RU2 / Dumai          → "RU II Dumai"
-   RU III / RU3 / Plaju         → "RU III Plaju"
-   RU IV / RU4 / Cilacap        → "RU IV Cilacap"
-   RU V / RU5 / Balikpapan      → "RU V Balikpapan"
-   RU VI / RU6 / Balongan       → "RU VI Balongan"
-   RU VII / RU7 / Kasim         → "RU VII Kasim"
+3. NORMALISASI nama RU / kilang / plant ke bentuk lengkap:
+   RU II / RU2 / Dumai / kilang Dumai / plant Dumai       → "RU II Dumai"
+   RU III / RU3 / Plaju / kilang Plaju / plant Plaju       → "RU III Plaju"
+   RU IV / RU4 / Cilacap / kilang Cilacap / plant Cilacap  → "RU IV Cilacap"
+   RU V / RU5 / Balikpapan / kilang Balikpapan             → "RU V Balikpapan"
+   RU VI / RU6 / Balongan / kilang Balongan                → "RU VI Balongan"
+   RU VII / RU7 / Kasim / kilang Kasim                     → "RU VII Kasim"
+   "kilang" / "plant" / "refinery" tanpa nama spesifik → pertahankan konteks, jangan ubah
 
 4. KONVERSI waktu relatif ke konteks yang jelas:
    "bulan ini"  → "bulan Juni 2026"
