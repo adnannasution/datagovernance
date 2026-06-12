@@ -131,12 +131,13 @@ def insert_chunks(chunks: list[dict]):
     if not chunks:
         return
     with get_conn() as conn:
-        conn.executemany("""
-            INSERT INTO doc_chunks
-                (doc_id, chunk_index, halaman, slide_number, slide_title, sheet_name, content, embedding)
-            VALUES (%(doc_id)s, %(chunk_index)s, %(halaman)s, %(slide_number)s,
-                    %(slide_title)s, %(sheet_name)s, %(content)s, %(embedding)s)
-        """, chunks)
+        with conn.cursor() as cur:
+            cur.executemany("""
+                INSERT INTO doc_chunks
+                    (doc_id, chunk_index, halaman, slide_number, slide_title, sheet_name, content, embedding)
+                VALUES (%(doc_id)s, %(chunk_index)s, %(halaman)s, %(slide_number)s,
+                        %(slide_title)s, %(sheet_name)s, %(content)s, %(embedding)s)
+            """, chunks)
         conn.commit()
 
 def get_chunks_preview(doc_id, limit=5):
@@ -155,12 +156,13 @@ def insert_table_rows(rows: list[dict]):
         return
     import json
     with get_conn() as conn:
-        conn.executemany("""
-            INSERT INTO doc_table_rows
-                (doc_id, halaman, sheet_name, row_index, row_data, tag_number)
-            VALUES (%(doc_id)s, %(halaman)s, %(sheet_name)s, %(row_index)s,
-                    %(row_data)s, %(tag_number)s)
-        """, [{**r, "row_data": json.dumps(r["row_data"])} for r in rows])
+        with conn.cursor() as cur:
+            cur.executemany("""
+                INSERT INTO doc_table_rows
+                    (doc_id, halaman, sheet_name, row_index, row_data, tag_number)
+                VALUES (%(doc_id)s, %(halaman)s, %(sheet_name)s, %(row_index)s,
+                        %(row_data)s, %(tag_number)s)
+            """, [{**r, "row_data": json.dumps(r["row_data"])} for r in rows])
         conn.commit()
 
 # ─── doc_tag_links ──────────────────────────────────────────
@@ -169,11 +171,12 @@ def insert_tag_links(doc_id, tag_numbers: list[str], link_type="manual"):
     if not tag_numbers:
         return
     with get_conn() as conn:
-        conn.executemany("""
-            INSERT INTO doc_tag_links (doc_id, tag_number, link_type)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (doc_id, tag_number) DO NOTHING
-        """, [(doc_id, tag.strip().upper(), link_type) for tag in tag_numbers if tag.strip()])
+        with conn.cursor() as cur:
+            cur.executemany("""
+                INSERT INTO doc_tag_links (doc_id, tag_number, link_type)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (doc_id, tag_number) DO NOTHING
+            """, [(doc_id, tag.strip().upper(), link_type) for tag in tag_numbers if tag.strip()])
         conn.commit()
 
 def get_tag_links(doc_id):
