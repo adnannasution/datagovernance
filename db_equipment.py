@@ -246,6 +246,25 @@ def get_plant_list() -> list:
 
 # ─── EQUIPMENT 360° ───────────────────────────────────────────────────────────
 
+def resolve_tag_variants(tag: str) -> list[str]:
+    """Return canonical tag + all approved variants from tag_mapping."""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT DISTINCT tag_variant FROM tag_mapping
+            WHERE tag_canonical = %s AND status = 'approved'
+        """, (tag,)).fetchall()
+    variants = {tag}
+    for r in rows:
+        if r["tag_variant"]:
+            variants.add(r["tag_variant"])
+    return list(variants)
+
+
+def _ph(tags: list) -> tuple[str, list]:
+    """Return (IN (%s,...), params) for a list of tags."""
+    return ','.join(['%s'] * len(tags)), tags
+
+
 def get_master_equipment(tag):
     with get_conn() as conn:
         r = conn.execute(
@@ -253,20 +272,22 @@ def get_master_equipment(tag):
         ).fetchone()
         return dict(r) if r else None
 
-def get_sap_notifications(tag):
+def get_sap_notifications(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT notification, notif_type, notif_date, system_status,
                    req_start, required_end, description, order_no,
                    functional_loc, location, criticality, planner_group,
                    main_workctr, maint_plant, has_long_text, uploaded_at
-            FROM sap_notifications WHERE equipment = %s
+            FROM sap_notifications WHERE equipment IN ({ph})
             ORDER BY notif_date DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_sap_notifications_summary(tag):
+def get_sap_notifications_summary(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        r = conn.execute("""
+        r = conn.execute(f"""
             SELECT COUNT(*) AS total,
                 SUM(CASE WHEN order_no IS NULL OR order_no='' THEN 1 ELSE 0 END) AS no_wo,
                 SUM(CASE WHEN system_status ILIKE '%OSNO%' THEN 1 ELSE 0 END) AS osno,
@@ -276,9 +297,10 @@ def get_sap_notifications_summary(tag):
         """, (tag,)).fetchone()
         return dict(r) if r else {"total":0,"no_wo":0,"osno":0,"overdue":0}
 
-def get_sap_work_orders(tag):
+def get_sap_work_orders(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT order_no, order_type, created_on, bas_start_date,
                    basic_fin_date, actual_finish, actual_release,
                    description, system_status, user_status,
@@ -286,13 +308,14 @@ def get_sap_work_orders(tag):
                    planner_group, main_workctr, maint_act_type,
                    total_plan_cost, total_act_cost, priority,
                    notification, po_number, plant
-            FROM sap_work_orders WHERE equipment = %s
+            FROM sap_work_orders WHERE equipment IN ({ph})
             ORDER BY created_on DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_sap_wo_summary(tag):
+def get_sap_wo_summary(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        r = conn.execute("""
+        r = conn.execute(f"""
             SELECT COUNT(*) AS total,
                 SUM(CASE WHEN system_status ILIKE '%TECO%'
                      OR system_status ILIKE '%CLSD%' THEN 1 ELSE 0 END) AS closed,
@@ -302,176 +325,192 @@ def get_sap_wo_summary(tag):
                      AND system_status NOT ILIKE '%TECO%'
                      AND system_status NOT ILIKE '%CLSD%' THEN 1 ELSE 0 END) AS overdue,
                 COALESCE(SUM(total_act_cost),0) AS total_cost
-            FROM sap_work_orders WHERE equipment = %s
-        """, (tag,)).fetchone()
+            FROM sap_work_orders WHERE equipment IN ({ph})
+        """, params).fetchone()
         return dict(r) if r else {"total":0,"closed":0,"open":0,"overdue":0,"total_cost":0}
 
-def get_bad_actor(tag):
+def get_bad_actor(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT ru, status, problem, action_plan, progress,
                    target_date, periode, action_plan_category,
                    external_resource, no_irkap, action_plan_remark
-            FROM bad_actor_monitoring WHERE tag_number = %s
+            FROM bad_actor_monitoring WHERE tag_number IN ({ph})
             ORDER BY periode DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_icu(tag):
+def get_icu(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT ru, icu_status, issue, mitigation, mitigasi_category,
                    permanent_solution, solution_category, progress,
                    target_closed, report_date, info,
                    remark_mitigation, remark_solution
-            FROM icu_monitoring WHERE tag_no = %s
+            FROM icu_monitoring WHERE tag_no IN ({ph})
             ORDER BY report_date DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_atg(tag):
+def get_atg(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, tag_no_tangki, tag_no_atg,
                    status_atg, status_interkoneksi_atg,
                    cert_no_atg, date_expired_atg, remark,
                    rtl, action_plan_category, status_rtl, month_update
             FROM atg_monitoring
-            WHERE tag_no_tangki = %s OR tag_no_atg = %s
+            WHERE tag_no_tangki IN ({ph}) OR tag_no_atg IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag, tag)).fetchall()
+        """, params + params).fetchall()
 
-def get_metering(tag):
+def get_metering(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, status_metering, cert_no_metering,
                    date_expired_metering, remark, rtl,
                    action_plan_category, status_rtl, month_update
-            FROM metering_monitoring WHERE tag_number = %s
+            FROM metering_monitoring WHERE tag_number IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_boc(tag):
+def get_boc(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT ru, area, unit, grup_equipment, status,
                    frequency, running_hours, mttr, mtbf, hasil
-            FROM boc WHERE equipment = %s ORDER BY ru
-        """, (tag,)).fetchall()
+            FROM boc WHERE equipment IN ({ph}) ORDER BY ru
+        """, params).fetchall()
 
-def get_pipeline(tag):
+def get_pipeline(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, fluida_service, nps,
                    from_location, to_location,
                    last_inspection_date, next_inspection_date,
                    last_measured_thickness, rem_life_years,
                    jumlah_temporary_repair, remarks, bulan, tahun
-            FROM pipeline_inspection WHERE tag_number = %s
+            FROM pipeline_inspection WHERE tag_number IN ({ph})
             ORDER BY tahun DESC NULLS LAST, bulan DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_inspection_plan(tag):
+def get_inspection_plan(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, type_equipment,
                    type_inspection, type_pekerjaan,
                    due_date, due_year, plan_date, plan_year,
                    actual_date, actual_year, update_date,
                    result_remaining_life, result_visual, grand_result
-            FROM inspection_plan WHERE tag_no_ln = %s
+            FROM inspection_plan WHERE tag_no_ln IN ({ph})
             ORDER BY due_year DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_zero_clamp(tag):
+def get_zero_clamp(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT ru, area, unit, services, description,
                    type_damage, posisi, type_perbaikan,
                    tanggal_dipasang, tanggal_dilepas,
                    tanggal_rencana_perbaikan, status, remarks, no_irkap
-            FROM zero_clamp WHERE tag_no_ln = %s
+            FROM zero_clamp WHERE tag_no_ln IN ({ph})
             ORDER BY tanggal_dipasang DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_readiness_jetty(tag):
+def get_readiness_jetty(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, status_operation,
                    status_tuks, expired_tuks, status_ijin_ops,
                    status_isps, status_struktur, remark_struktur,
                    status_trestle, status_mla, status_fire_protection,
                    month_update
-            FROM readiness_jetty WHERE tag_no = %s
+            FROM readiness_jetty WHERE tag_no IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_readiness_tank(tag):
+def get_readiness_tank(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, type_tangki, service_tangki,
                    prioritas, status_operational, atg_certification_validity,
                    status_coi, internal_inspection, plan_internal_inspection,
                    status_atg, status_grounding, status_shell_course,
                    status_roof, status_cathodic, month_update
-            FROM readiness_tank WHERE tag_number = %s
+            FROM readiness_tank WHERE tag_number IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_readiness_spm(tag):
+def get_readiness_spm(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, status_operation,
                    status_laik_operasi, expired_laik_operasi,
                    status_ijin_spl, status_mbc, status_lds,
                    status_mooring_hawser, status_floating_hose,
                    status_cathodic_spl, month_update
-            FROM readiness_spm WHERE tag_no = %s
+            FROM readiness_spm WHERE tag_no IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_workplan_jetty(tag):
+def get_workplan_jetty(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, item, status_item,
                    remark, rtl_action_plan, action_plan_category,
                    target, status_rtl, month_update
-            FROM workplan_jetty WHERE tag_no = %s
+            FROM workplan_jetty WHERE tag_no IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_workplan_tank(tag):
+def get_workplan_tank(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT unit, item, remark, rtl_action_plan,
                    action_plan_category, target, status_rtl, month_update
-            FROM workplan_tank WHERE tag_no = %s
+            FROM workplan_tank WHERE tag_no IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_workplan_spm(tag):
+def get_workplan_spm(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, area, unit, item, remark,
                    rtl_action_plan, action_plan_category,
                    target, status_rtl, month_update
-            FROM spm_workplan WHERE tag_no = %s
+            FROM spm_workplan WHERE tag_no IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_irkap_program(tag):
+def get_irkap_program(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, disiplin, kategori_rkap,
                    no_program_kerja, type_equipment, program_kerja,
                    status_step, status_prognosa, start_plan, finish_plan,
                    nilai_anggaran_idr, nilai_anggaran_usd,
                    top_risk, asset_integrity
-            FROM irkap_program WHERE equipment_tag_no = %s
+            FROM irkap_program WHERE equipment_tag_no IN ({ph})
             ORDER BY start_plan DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_irkap_actual(tag):
+def get_irkap_actual(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT no_program, kategori_rkap, program_kerja,
                    refinery_unit, area, disiplin,
                    status_step, status_prognosa, current_step,
@@ -480,56 +519,59 @@ def get_irkap_actual(tag):
                    actual_start1, actual_finish1,
                    actual_start3, actual_finish3,
                    failure_impact, rekomendasi
-            FROM irkap_actual WHERE tag_no = %s
+            FROM irkap_actual WHERE tag_no IN ({ph})
             ORDER BY no DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_critical_prim_sec(tag):
+def get_critical_prim_sec(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, unit_proses, highlight_issue,
                    corrective_action, target_corrective, traffic_corrective,
                    mitigasi_action, target_mitigasi, traffic_mitigasi,
                    month_update
-            FROM critical_eqp_prim_sec WHERE equipment = %s
+            FROM critical_eqp_prim_sec WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
-def get_power_stream(tag):
+def get_power_stream(tag, tags=None):
+    ph, params = _ph(tags or [tag])
     with get_conn() as conn:
-        return conn.execute("""
+        return conn.execute(f"""
             SELECT refinery_unit, type_equipment, status_operation,
                    status_n0, unit_measurement, desain,
                    kapasitas_max, average_actual, remark,
                    date_update, month_update
-            FROM power_stream WHERE equipment = %s
+            FROM power_stream WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
-        """, (tag,)).fetchall()
+        """, params).fetchall()
 
 def get_equipment_360(tag: str) -> dict:
+    tags      = resolve_tag_variants(tag)
     master    = get_master_equipment(tag)
-    notif     = get_sap_notifications(tag)
-    notif_sum = get_sap_notifications_summary(tag)
-    wo        = get_sap_work_orders(tag)
-    wo_sum    = get_sap_wo_summary(tag)
-    bad_actor = get_bad_actor(tag)
-    icu       = get_icu(tag)
-    atg       = get_atg(tag)
-    metering  = get_metering(tag)
-    boc       = get_boc(tag)
-    pipeline  = get_pipeline(tag)
-    insp_plan = get_inspection_plan(tag)
-    zc        = get_zero_clamp(tag)
-    r_jetty   = get_readiness_jetty(tag)
-    r_tank    = get_readiness_tank(tag)
-    r_spm     = get_readiness_spm(tag)
-    wp_jetty  = get_workplan_jetty(tag)
-    wp_tank   = get_workplan_tank(tag)
-    wp_spm    = get_workplan_spm(tag)
-    irkap_p   = get_irkap_program(tag)
-    irkap_a   = get_irkap_actual(tag)
-    crit      = get_critical_prim_sec(tag)
-    power     = get_power_stream(tag)
+    notif     = get_sap_notifications(tag, tags=tags)
+    notif_sum = get_sap_notifications_summary(tag, tags=tags)
+    wo        = get_sap_work_orders(tag, tags=tags)
+    wo_sum    = get_sap_wo_summary(tag, tags=tags)
+    bad_actor = get_bad_actor(tag, tags=tags)
+    icu       = get_icu(tag, tags=tags)
+    atg       = get_atg(tag, tags=tags)
+    metering  = get_metering(tag, tags=tags)
+    boc       = get_boc(tag, tags=tags)
+    pipeline  = get_pipeline(tag, tags=tags)
+    insp_plan = get_inspection_plan(tag, tags=tags)
+    zc        = get_zero_clamp(tag, tags=tags)
+    r_jetty   = get_readiness_jetty(tag, tags=tags)
+    r_tank    = get_readiness_tank(tag, tags=tags)
+    r_spm     = get_readiness_spm(tag, tags=tags)
+    wp_jetty  = get_workplan_jetty(tag, tags=tags)
+    wp_tank   = get_workplan_tank(tag, tags=tags)
+    wp_spm    = get_workplan_spm(tag, tags=tags)
+    irkap_p   = get_irkap_program(tag, tags=tags)
+    irkap_a   = get_irkap_actual(tag, tags=tags)
+    crit      = get_critical_prim_sec(tag, tags=tags)
+    power     = get_power_stream(tag, tags=tags)
 
     # Health Score
     score, alerts = 100, []
