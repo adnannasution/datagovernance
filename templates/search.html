@@ -141,6 +141,21 @@
 .badge-criticality-unknown{ background: #f3f4f6; color: #6b7280; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
 .eq-detail-link { font-size: 0.82rem; color: var(--primary, #2563eb); text-decoration: none; margin-left: auto; white-space: nowrap; }
 .eq-detail-link:hover { text-decoration: underline; }
+.btn-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  color: var(--primary, #2563eb);
+  border: 1px solid var(--primary, #2563eb);
+  border-radius: 5px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-download:hover { background: var(--primary, #2563eb); color: #fff; }
 </style>
 {% endblock %}
 
@@ -238,6 +253,10 @@ async function doSearch() {
             <div class="result-footer">
               <div class="score-bar"><div class="score-fill" style="width:${score}%"></div></div>
               <span class="score-label">${score}% relevan</span>
+              <a href="/api/document/${r.doc_id}/download" class="btn-download" download title="Download dokumen">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+              </a>
             </div>
           </div>
         </div>`;
