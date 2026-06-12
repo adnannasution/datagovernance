@@ -61,6 +61,22 @@ def ensure_constraints():
                 CREATE INDEX doc_judul_idx IF NOT EXISTS
                 FOR (d:Document) ON (d.judul)
             """)
+            # Index untuk Equipment tag_number dan description (search autocomplete)
+            session.run("""
+                CREATE INDEX equipment_tag_idx IF NOT EXISTS
+                FOR (e:Equipment) ON (e.tag_number)
+            """)
+            try:
+                session.run("""
+                    CREATE TEXT INDEX equipment_tag_text_idx IF NOT EXISTS
+                    FOR (e:Equipment) ON (e.tag_number)
+                """)
+                session.run("""
+                    CREATE TEXT INDEX equipment_desc_text_idx IF NOT EXISTS
+                    FOR (e:Equipment) ON (e.description)
+                """)
+            except Exception:
+                pass  # TEXT index butuh Neo4j 4.4+ — skip kalau tidak support
 
 # ─── Single Document Sync ────────────────────────────────────────────────────
 
