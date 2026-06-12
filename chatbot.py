@@ -547,9 +547,37 @@ petakan ke kolom yang relevan dan gunakan ILIKE '%nilai%':
     readiness_jetty.expired_tuks < CURRENT_DATE,
     readiness_spm.expired_laik_operasi < CURRENT_DATE
 
-"rusak" / "masalah" / "bermasalah"
+"rusak" / "masalah" / "bermasalah" / "gangguan" / "isu" / "problem"
   → bad_actor_monitoring (ada entri), icu_monitoring (ada entri),
     critical_eqp_prim_sec.highlight_issue IS NOT NULL
+
+"berisiko" / "risiko tinggi" / "kritis"
+  → bad_actor_monitoring + icu_monitoring + critical_eqp_prim_sec (criticality A/B)
+
+"keandalan" / "reliability" / "andal"
+  → bad_actor_monitoring.mtbf, boc.hasil, boc.mtbf
+
+"aset" / "peralatan" / "alat" / "mesin"
+  → master_data_equipment (tabel utama semua equipment)
+
+"overview" / "ringkasan" / "rekap" / "summary" / "gambaran"
+  → agregasi COUNT(*) per RU atau per domain
+
+"highlight" / "perlu diperhatikan" / "prioritas"
+  → equipment di bad_actor_monitoring + icu_monitoring + expired + N+0
+
+"anggaran" / "budget" / "biaya" / "cost"
+  → irkap_program.nilai_anggaran_idr, irkap_actual
+
+"realisasi" / "aktual" / "progress anggaran"
+  → irkap_actual.status_step, irkap_actual
+
+"usia pakai" / "umur" / "sudah berapa lama"
+  → boc.running_hours, master_data_equipment (tanggal install jika ada)
+
+"sertifikat" / "sertifikasi" / "perizinan"
+  → atg_monitoring.cert_no_atg + date_expired_atg,
+    metering_monitoring.cert_no_metering + date_expired_metering
 
 "tanpa standby" / "single" / "tidak ada cadangan"
   → boc.hasil = 'N+0' ATAU boc.hasil = 'Single'
@@ -598,6 +626,40 @@ petakan ke kolom yang relevan dan gunakan ILIKE '%nilai%':
 
 "dokumen" / "file" / "laporan" / "SOP"
   → doc_registry JOIN doc_tag_links
+
+=== CONTOH PERTANYAAN EKSEKUTIF / MANAJERIAL ===
+
+-- "Berapa total aset/equipment kita?" → total semua equipment di master_data_equipment
+SELECT COUNT(*) AS total_equipment FROM master_data_equipment
+
+-- "Ringkasan kondisi equipment per RU" → agregasi status per kilang
+SELECT refinery_unit, COUNT(*) AS total,
+  SUM(CASE WHEN LOWER(status_operation) LIKE '%running%' THEN 1 ELSE 0 END) AS running,
+  SUM(CASE WHEN LOWER(status_operation) LIKE '%shutdown%' OR LOWER(status_operation) LIKE '%mati%' THEN 1 ELSE 0 END) AS shutdown
+FROM power_stream GROUP BY refinery_unit ORDER BY total DESC
+
+-- "Equipment mana yang paling berisiko?" → bad actor + ICU
+SELECT COALESCE(b.tag_number, i.tag_no) AS tag, b.problem, b.status AS bad_actor_status, i.icu_status
+FROM bad_actor_monitoring b
+FULL OUTER JOIN icu_monitoring i ON b.tag_number = i.tag_no
+WHERE b.tag_number IS NOT NULL OR i.tag_no IS NOT NULL
+LIMIT 20
+
+-- "Berapa equipment tanpa cadangan (rentan)?"
+SELECT ru, COUNT(*) AS jumlah_rentan FROM boc
+WHERE hasil IN ('N+0','Single') GROUP BY ru ORDER BY jumlah_rentan DESC
+
+-- "Progress anggaran pemeliharaan tahun ini?"
+SELECT refinery_unit,
+  SUM(nilai_anggaran_idr) AS total_plan_idr,
+  COUNT(*) AS jumlah_program
+FROM irkap_program WHERE EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+GROUP BY refinery_unit ORDER BY total_plan_idr DESC
+
+-- "Berapa aset yang expired sertifikasinya?"
+SELECT 'ATG' AS jenis, COUNT(*) AS jumlah FROM atg_monitoring WHERE date_expired_atg < CURRENT_DATE
+UNION ALL
+SELECT 'Metering', COUNT(*) FROM metering_monitoring WHERE date_expired_metering < CURRENT_DATE
 
 === ATURAN PENTING ===
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
@@ -909,14 +971,33 @@ def extract_tag_from_message(message: str) -> str | None:
 REWRITER_PROMPT = """Kamu adalah query normalizer untuk sistem data governance Pertamina.
 
 Tugasmu: susun ulang pertanyaan user menjadi pertanyaan yang jelas, lengkap, dan mudah dipahami sistem.
+Pengguna bisa siapa saja: engineer, supervisor, manager, hingga direktur — jadi istilah bisnis harus diterjemahkan ke istilah teknis yang sistem mengerti.
 
 PANDUAN NORMALISASI:
 
 1. PERBAIKI typo, singkatan, bahasa informal:
    "yg" → "yang", "blm" → "belum", "udh" → "sudah", "gak/ga" → "tidak"
    "critA" → "criticality A", "BA" → "bad actor", "WO" → "work order"
+   "notif" → "notifikasi SAP", "insp" → "inspection plan"
 
-2. LENGKAPI konteks dari history percakapan:
+2. TERJEMAHKAN istilah bisnis/eksekutif ke istilah teknis:
+   "aset" / "peralatan" / "alat" / "mesin"        → "equipment"
+   "kondisi aset" / "kesehatan aset"               → "status equipment dan bad actor dan ICU"
+   "kinerja" / "performa" / "produktivitas"        → "status operasi equipment (running/standby/shutdown)"
+   "risiko" / "berisiko tinggi"                    → "equipment bad actor atau criticality A atau ICU"
+   "pemeliharaan" / "perawatan" / "maintenance"    → "work order dan inspection plan"
+   "anggaran" / "budget" / "biaya"                 → "IRKAP program dan actual"
+   "progress" / "realisasi"                        → "status IRKAP actual"
+   "masalah" / "problem" / "gangguan" / "isu"      → "bad actor atau ICU monitoring"
+   "keandalan" / "reliability" / "handal"          → "MTBF, bad actor, BOC standby"
+   "kesiapan" / "readiness" / "laik"               → "readiness jetty/tank/SPM"
+   "ringkasan" / "summary" / "overview" / "rekap"  → "total agregasi per kategori/RU"
+   "highlight" / "perlu diperhatikan"              → "equipment dengan bad actor atau ICU atau expired"
+   "sudah berapa lama" / "usia"                    → "tanggal dipasang atau running hours"
+   "paling banyak masalah"                         → "equipment dengan jumlah bad actor atau notifikasi terbanyak"
+   "tidak ada cadangan" / "rentan"                 → "BOC hasil N+0 atau Single"
+
+3. LENGKAPI konteks dari history percakapan:
    "berapa jumlahnya?" + history ada tentang bad actor RU IV
    → "Berapa jumlah bad actor di RU IV?"
 
@@ -1638,18 +1719,24 @@ def handle_general(message: str, history: list = None) -> dict:
         {
             "role": "system",
             "content": """Kamu adalah asisten data governance Pertamina DGS.
-Bantu user memahami sistem, menjawab pertanyaan umum seputar equipment, maintenance, dan data governance.
-Jawab dalam Bahasa Indonesia. Singkat dan helpful.
+Pengguna bisa engineer, supervisor, manager, hingga direktur — jawab sesuai konteks tanpa jargon teknis berlebihan.
 
-Jika pertanyaan sama sekali di luar konteks sistem (misal: resep masakan, berita, dll),
-tolak dengan ramah dan arahkan kembali ke topik yang relevan seperti:
-- Data equipment & tag number
-- Work order & notifikasi SAP
-- Knowledge Graph & relasi equipment
-- Kualitas data & catalog tabel
-- Dokumen internal Pertamina
+Bantu user dengan:
+- Pertanyaan umum tentang equipment, maintenance, reliability, anggaran, kesiapan operasi
+- Menjelaskan apa yang bisa ditanyakan ke sistem
+- Memberikan panduan cara bertanya yang tepat
 
-Jangan pernah menjawab kosong — selalu berikan respons yang helpful."""
+Contoh pertanyaan yang bisa dijawab sistem:
+- "Berapa total aset kita di RU IV?"
+- "Equipment mana yang paling berisiko?"
+- "Bagaimana kondisi readiness jetty saat ini?"
+- "Berapa equipment yang expired sertifikasinya?"
+- "Cari semua informasi tentang tag 10-P-101"
+
+Jika pertanyaan di luar konteks Pertamina (resep, berita umum, dll):
+tolak dengan ramah, arahkan ke topik equipment/maintenance/data governance.
+
+Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel atau kolom database."""
         }
     ]
     if history:
