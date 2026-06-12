@@ -122,6 +122,85 @@ def _build_categorical_prompt() -> str:
     return "\n".join(lines)
 
 
+# Neo4j categorical values
+NEO4J_CATEGORICAL_PROPERTIES = [
+    ("Equipment",        "criticality"),
+    ("BadActor",         "status"),
+    ("BadActor",         "action_plan_category"),
+    ("ICUMonitoring",    "icu_status"),
+    ("ICUMonitoring",    "mitigasi_category"),
+    ("ICUMonitoring",    "solution_category"),
+    ("BOC",              "status"),
+    ("BOC",              "hasil"),
+    ("ATGMonitoring",    "status_atg"),
+    ("MeteringMonitor",  "status_metering"),
+    ("IRKAPProgram",     "status_step"),
+    ("IRKAPProgram",     "status_prognosa"),
+    ("IRKAPProgram",     "kategori_rkap"),
+    ("IRKAPActual",      "status_step"),
+    ("IRKAPActual",      "status_prognosa"),
+    ("SAPNotification",  "notif_type"),
+    ("SAPNotification",  "system_status"),
+    ("SAPWorkOrder",     "system_status"),
+    ("SAPWorkOrder",     "order_type"),
+    ("ZeroClamp",        "status"),
+    ("InspectionPlan",   "grand_result"),
+    ("ReadinessJetty",   "status_operation"),
+    ("ReadinessTank",    "status_operational"),
+    ("ReadinessSPM",     "status_operation"),
+    ("PowerStream",      "status_operation"),
+]
+
+_neo4j_categorical_cache: dict = {}
+_neo4j_categorical_last_refresh: float = 0
+
+
+def _build_neo4j_categorical_values() -> dict:
+    """Query DISTINCT property values dari Neo4j nodes."""
+    result = {}
+    try:
+        from neo4j_sync import get_driver
+        driver = get_driver()
+        if not driver:
+            return result
+        with driver.session() as session:
+            for label, prop in NEO4J_CATEGORICAL_PROPERTIES:
+                try:
+                    rows = session.run(
+                        f"MATCH (n:{label}) WHERE n.{prop} IS NOT NULL "
+                        f"RETURN DISTINCT n.{prop} AS val ORDER BY val LIMIT 30"
+                    ).data()
+                    vals = [r["val"] for r in rows if r["val"]]
+                    if vals:
+                        result[f"{label}.{prop}"] = vals
+                except Exception:
+                    pass
+        driver.close()
+    except Exception as e:
+        logging.warning(f"[NEO4J CATEGORICAL] Build failed: {e}")
+    return result
+
+
+def _get_neo4j_categorical_values() -> dict:
+    global _neo4j_categorical_cache, _neo4j_categorical_last_refresh
+    now = time.time()
+    if not _neo4j_categorical_cache or (now - _neo4j_categorical_last_refresh) > _CATEGORICAL_TTL:
+        _neo4j_categorical_cache = _build_neo4j_categorical_values()
+        _neo4j_categorical_last_refresh = now
+    return _neo4j_categorical_cache
+
+
+def _build_neo4j_categorical_prompt() -> str:
+    vals = _get_neo4j_categorical_values()
+    if not vals:
+        return ""
+    lines = ["\n=== NILAI AKTUAL DI NEO4J (gunakan ini untuk filter) ==="]
+    for key, values in vals.items():
+        formatted = ", ".join(f"'{v}'" for v in values[:20])
+        lines.append(f"{key}: {formatted}")
+    return "\n".join(lines)
+
+
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
 def _get_db_schema() -> str:
@@ -864,8 +943,31 @@ PANDUAN NORMALISASI:
 OUTPUT: kembalikan HANYA pertanyaan yang sudah dinormalisasi, tanpa penjelasan apapun."""
 
 
+def _needs_rewrite(message: str, history: list) -> bool:
+    """Cek apakah pertanyaan perlu di-rewrite. Skip kalau sudah jelas."""
+    # Pertanyaan sangat pendek atau ambigu → perlu rewrite
+    if len(message.strip()) < 10:
+        return True
+    # Ada history → mungkin ada referensi konteks ("yang itu", "berapa", dll)
+    if history:
+        AMBIGUOUS = ["itu", "tadi", "tersebut", "nya", "mereka", "dia",
+                     "berapa", "siapa", "mana", "kapan", "gimana"]
+        if any(w in message.lower().split() for w in AMBIGUOUS):
+            return True
+    # Ada singkatan / typo umum → perlu rewrite
+    INFORMAL = ["yg", "utk", "dg", "dgn", "blm", "udh", "gak", "ga ",
+                "critA", "critB", "BA ", " WO ", "IRKAP", "bulan ini",
+                "tahun ini", "tahun lalu", "terbaru", "terbesar"]
+    if any(w in message for w in INFORMAL):
+        return True
+    return False
+
+
 def rewrite_query(message: str, history: list) -> str:
-    """Normalisasi pertanyaan user sebelum diproses sistem."""
+    """Normalisasi pertanyaan user sebelum diproses sistem. Skip jika tidak perlu."""
+    if not _needs_rewrite(message, history):
+        return message
+
     history_text = ""
     if history:
         history_text = "\n".join([
@@ -1313,10 +1415,12 @@ def _get_cypher_prompt() -> str:
     return f"""Kamu adalah Cypher query generator untuk Neo4j Knowledge Graph Pertamina.
 
 {NEO4J_SCHEMA_FALLBACK}
+{_build_neo4j_categorical_prompt()}
 
 INSTRUKSI:
 - Generate Cypher query yang menjawab pertanyaan user
 - Ikuti contoh query di atas sebagai referensi pola yang benar
+- Gunakan nilai aktual dari daftar di atas untuk filter (jangan tebak)
 - SELALU gunakan e.tag_number untuk Equipment node
 - Arah relasi SELALU (Equipment)-[:REL]->(Node) sesuai schema
 - Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa markdown backtick"""
