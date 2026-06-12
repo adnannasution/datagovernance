@@ -1104,7 +1104,14 @@ def handle_rag(message: str, filters: dict = None) -> dict:
     if not results:
         return {
             "type": "rag",
-            "answer": "Tidak ditemukan dokumen yang relevan dengan pertanyaan ini.",
+            "answer": (
+                "Saya tidak menemukan dokumen yang relevan untuk pertanyaan ini di perpustakaan dokumen.\n\n"
+                "Beberapa kemungkinan:\n"
+                "- Dokumen terkait belum diunggah ke sistem\n"
+                "- Coba gunakan kata kunci yang berbeda\n"
+                "- Atau tanyakan langsung tentang data equipment, misalnya: "
+                "*\"Berapa jumlah equipment di RU IV?\"* atau *\"Cari tag 10-P-101\"*"
+            ),
             "sources": [],
             "context_used": ""
         }
@@ -1230,7 +1237,13 @@ def handle_sql(message: str, history: list = None) -> dict:
     if not sql.upper().startswith("SELECT"):
         return {
             "type": "sql",
-            "answer": "Maaf, saya hanya bisa menjalankan query SELECT.",
+            "answer": (
+                "Maaf, saya hanya bisa membaca data (query SELECT) — "
+                "tidak bisa mengubah, menghapus, atau menambah data.\n\n"
+                "Coba ajukan pertanyaan seperti:\n"
+                "- *\"Berapa total equipment di RU IV?\"*\n"
+                "- *\"Tampilkan work order yang statusnya OPEN\"*"
+            ),
             "sql": sql,
             "data": [],
             "error": "Non-SELECT query blocked"
@@ -1257,7 +1270,13 @@ def handle_sql(message: str, history: list = None) -> dict:
     if last_error:
         return {
             "type": "sql",
-            "answer": f"Query gagal dijalankan setelah retry: {last_error}",
+            "answer": (
+                "Pertanyaan ini tidak berhasil diproses ke database.\n\n"
+                "Kemungkinan penyebab:\n"
+                "- Pertanyaan terlalu ambigu atau menyebut hal yang tidak ada di sistem\n"
+                "- Coba lebih spesifik, misalnya sebutkan nama RU, tag number, atau status yang dimaksud\n\n"
+                f"*Detail error: {last_error}*"
+            ),
             "sql": sql,
             "data": [],
             "error": last_error
@@ -1266,7 +1285,13 @@ def handle_sql(message: str, history: list = None) -> dict:
     if not data:
         return {
             "type": "sql",
-            "answer": "Query berhasil dijalankan tapi tidak ada data yang ditemukan.",
+            "answer": (
+                "Data tidak ditemukan untuk pertanyaan ini.\n\n"
+                "Kemungkinan:\n"
+                "- Filter yang kamu gunakan terlalu spesifik (RU, status, tag tidak cocok)\n"
+                "- Data memang belum tersedia di sistem\n\n"
+                "Coba ubah filter atau gunakan kata kunci yang lebih umum."
+            ),
             "sql": sql,
             "data": [],
             "error": None
@@ -1488,7 +1513,13 @@ Jawab secara terstruktur dan informatif."""
                     return sql_result
             return {
                 "type": "graph",
-                "answer": "Tidak ditemukan data di Knowledge Graph untuk pertanyaan ini.",
+                "answer": (
+                    "Tidak ditemukan data di Knowledge Graph untuk pertanyaan ini.\n\n"
+                    "Kemungkinan:\n"
+                    "- Tag number belum tersinkron ke Knowledge Graph\n"
+                    "- Coba cek di halaman *Sync Management* untuk memastikan tabel sudah tersinkron\n"
+                    "- Atau tanyakan langsung ke database: *\"Cari data tag [nomor tag] di semua tabel\"*"
+                ),
                 "cypher": cypher,
                 "data": []
             }
@@ -1521,7 +1552,11 @@ Jawab secara terstruktur dan informatif."""
         logging.error(f"[GRAPH ERROR] {e}\n{traceback.format_exc()}")
         return {
             "type": "graph",
-            "answer": f"Knowledge Graph tidak dapat diakses: {str(e)}",
+            "answer": (
+                "Knowledge Graph sedang tidak dapat diakses saat ini.\n\n"
+                "Coba beberapa saat lagi, atau tanyakan hal yang sama menggunakan data dari database:\n"
+                "misalnya *\"Berapa work order untuk tag [nomor tag]?\"*"
+            ),
             "cypher": "",
             "data": [],
             "error": str(e)
@@ -1602,9 +1637,19 @@ def handle_general(message: str, history: list = None) -> dict:
     messages = [
         {
             "role": "system",
-            "content": """Kamu adalah asisten data governance Pertamina.
-Bantu user memahami sistem, menjawab pertanyaan umum, dan mengarahkan ke fitur yang tepat.
-Jawab dalam Bahasa Indonesia. Singkat dan helpful."""
+            "content": """Kamu adalah asisten data governance Pertamina DGS.
+Bantu user memahami sistem, menjawab pertanyaan umum seputar equipment, maintenance, dan data governance.
+Jawab dalam Bahasa Indonesia. Singkat dan helpful.
+
+Jika pertanyaan sama sekali di luar konteks sistem (misal: resep masakan, berita, dll),
+tolak dengan ramah dan arahkan kembali ke topik yang relevan seperti:
+- Data equipment & tag number
+- Work order & notifikasi SAP
+- Knowledge Graph & relasi equipment
+- Kualitas data & catalog tabel
+- Dokumen internal Pertamina
+
+Jangan pernah menjawab kosong — selalu berikan respons yang helpful."""
         }
     ]
     if history:
