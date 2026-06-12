@@ -487,11 +487,13 @@ async def page_knowledge_graph(request: Request):
             "connected": ct.get("connected", 0),
             "synced": ct.get("connected", 0) > 0,
         })
-    # Catalog-only tables — exist in TABLE_CATALOG but not in Neo4j (no tag col)
+    # Catalog-only tables — exist in TABLE_CATALOG but not synced as Neo4j relations
+    # Exclude: master_data_equipment (IS the Equipment node), doc_registry (Document node)
     neo4j_tables_set = set(TABLE_NEO4J_CONFIG.keys())
+    exclude = {"master_data_equipment", "doc_registry"}
     catalog_only = [
         t for t in TABLE_CATALOG
-        if t["table"] not in neo4j_tables_set and t["table"] != "doc_registry"
+        if t["table"] not in neo4j_tables_set and t["table"] not in exclude
     ]
     return templates.TemplateResponse(request, "knowledge_graph.html", {
         "stats": stats,
