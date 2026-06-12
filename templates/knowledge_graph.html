@@ -719,7 +719,7 @@ let _tagSearchTimer = null;
 async function onTagInput(val) {
   clearTimeout(_tagSearchTimer);
   const dd = document.getElementById('tag-dropdown');
-  if (!val || val.length < 1) { dd.style.display = 'none'; return; }
+  if (!val || val.length < 2) { dd.style.display = 'none'; return; }
   _tagSearchTimer = setTimeout(async () => {
     try {
       const res = await fetch(`/api/neo4j/tags/search?q=${encodeURIComponent(val)}&limit=15`);
