@@ -11,58 +11,66 @@
 {% block head_extra %}{% endblock %}
 </head>
 <body>
-<aside class="sidebar">
+<div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="brand-icon-wrap">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
     </div>
     <span class="brand-text">DGS Pertamina</span>
+    <button class="sidebar-close-btn" onclick="closeSidebar()" title="Tutup menu">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-group-label">Governance</div>
-    <a href="/governance" class="nav-item gov-item {% if title == 'Data Governance' %}active{% endif %}">
+    <a href="/governance" class="nav-item gov-item {% if title == 'Data Governance' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       Overview
     </a>
-    <a href="/catalog" class="nav-item gov-item {% if title == 'Data Catalog' %}active{% endif %}">
+    <a href="/catalog" class="nav-item gov-item {% if title == 'Data Catalog' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Data Catalog
     </a>
-    <a href="/chat" class="nav-item gov-item {% if title == 'AI Assistant' %}active{% endif %}">
+    <a href="/chat" class="nav-item gov-item {% if title == 'AI Assistant' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
       AI Assistant
     </a>
-    <a href="/knowledge-graph" class="nav-item gov-item {% if title == 'Knowledge Graph' %}active{% endif %}">
+    <a href="/knowledge-graph" class="nav-item gov-item {% if title == 'Knowledge Graph' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
       Knowledge Graph
     </a>
-    <a href="/tag-mapping" class="nav-item gov-item {% if title == 'Tag Mapping' %}active{% endif %}">
+    <a href="/tag-mapping" class="nav-item gov-item {% if title == 'Tag Mapping' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       Tag Mapping
     </a>
 
     <div class="nav-group-label">Dokumen</div>
-    <a href="/" class="nav-item doc-item {% if title == 'Dashboard' %}active{% endif %}">
+    <a href="/" class="nav-item doc-item {% if title == 'Dashboard' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       Dashboard
     </a>
-    <a href="/upload" class="nav-item doc-item {% if title == 'Upload Dokumen' %}active{% endif %}">
+    <a href="/upload" class="nav-item doc-item {% if title == 'Upload Dokumen' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Upload
     </a>
-    <a href="/library" class="nav-item doc-item {% if title == 'Perpustakaan Dokumen' %}active{% endif %}">
+    <a href="/library" class="nav-item doc-item {% if title == 'Perpustakaan Dokumen' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       Perpustakaan
     </a>
-    <a href="/search" class="nav-item doc-item {% if title == 'Smart Search' %}active{% endif %}">
+    <a href="/search" class="nav-item doc-item {% if title == 'Smart Search' %}active{% endif %}" onclick="closeSidebar()">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       Smart Search
     </a>
   </nav>
 </aside>
-<main class="main">
+<main class="main" id="main-content">
   <header class="topbar">
+    <button class="sidebar-toggle-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle menu">
+      <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <div class="topbar-breadcrumb">
+      <span class="topbar-brand-mobile">DGS</span>
       <span>DGS Pertamina</span>
       <span class="sep">›</span>
       <span class="current">{{ title }}</span>
@@ -73,6 +81,59 @@
   </div>
 </main>
 <script src="/static/js/app.js"></script>
+<script>
+// Sidebar toggle
+const SIDEBAR_KEY = 'dgs_sidebar_open';
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const isMobile = window.innerWidth < 768;
+
+  if (isMobile) {
+    // Mobile: overlay drawer
+    const isOpen = sidebar.classList.contains('mobile-open');
+    sidebar.classList.toggle('mobile-open', !isOpen);
+    overlay.classList.toggle('active', !isOpen);
+  } else {
+    // Desktop: collapse/expand
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    sidebar.classList.toggle('collapsed', !isCollapsed);
+    document.getElementById('main-content').classList.toggle('sidebar-collapsed', !isCollapsed);
+    localStorage.setItem(SIDEBAR_KEY, isCollapsed ? 'open' : 'collapsed');
+  }
+}
+
+function closeSidebar() {
+  const isMobile = window.innerWidth < 768;
+  if (isMobile) {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.remove('active');
+  }
+}
+
+// Restore desktop state
+(function() {
+  const state = localStorage.getItem(SIDEBAR_KEY);
+  if (state === 'collapsed' && window.innerWidth >= 768) {
+    document.getElementById('sidebar').classList.add('collapsed');
+    document.getElementById('main-content').classList.add('sidebar-collapsed');
+  }
+  // On mobile: start with sidebar hidden
+  if (window.innerWidth < 768) {
+    document.getElementById('main-content').style.marginLeft = '0';
+  }
+})();
+
+// Close on resize to desktop
+window.addEventListener('resize', function() {
+  if (window.innerWidth >= 768) {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.remove('active');
+    document.getElementById('main-content').style.marginLeft = '';
+  }
+});
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
