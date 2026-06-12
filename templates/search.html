@@ -52,20 +52,22 @@
     {% endfor %}
   </div>
 
-  <div id="search-status" class="search-status hidden"></div>
+  <div class="search-results-area">
+    <div id="search-status" class="search-status hidden"></div>
 
-  <!-- Tab buttons (hidden until search fires) -->
-  <div id="result-tabs" class="result-tabs hidden">
-    <button id="tab-doc" class="result-tab-btn active" onclick="switchTab('doc')">
-      Dokumen <span id="tab-doc-count" class="tab-count">0</span>
-    </button>
-    <button id="tab-graph" class="result-tab-btn" onclick="switchTab('graph')">
-      Equipment &amp; Graph <span id="tab-graph-count" class="tab-count">0</span>
-    </button>
+    <!-- Tab buttons (hidden until search fires) -->
+    <div id="result-tabs" class="result-tabs hidden">
+      <button id="tab-doc" class="result-tab-btn active" onclick="switchTab('doc')">
+        Dokumen <span id="tab-doc-count" class="tab-count">0</span>
+      </button>
+      <button id="tab-graph" class="result-tab-btn" onclick="switchTab('graph')">
+        Equipment &amp; Graph <span id="tab-graph-count" class="tab-count">0</span>
+      </button>
+    </div>
+
+    <div id="results-doc" class="results-panel"></div>
+    <div id="results-graph" class="results-panel hidden"></div>
   </div>
-
-  <div id="results-doc" class="results-panel"></div>
-  <div id="results-graph" class="results-panel hidden"></div>
 </div>
 
 <style>
