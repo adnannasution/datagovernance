@@ -8,6 +8,8 @@ Core chatbot engine dengan 3 kemampuan:
 import os
 import json
 import re
+import time
+import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -19,10 +21,111 @@ client = OpenAI(
 )
 MODEL = "gpt-4o"
 
+# ─── Categorical value cache ──────────────────────────────────────────────────
+
+# Kolom kategorikal yang nilainya sering disebut user dalam pertanyaan
+CATEGORICAL_COLUMNS = [
+    ("master_data_equipment",       "criticality"),
+    ("bad_actor_monitoring",        "status"),
+    ("bad_actor_monitoring",        "action_plan_category"),
+    ("icu_monitoring",              "icu_status"),
+    ("icu_monitoring",              "mitigasi_category"),
+    ("icu_monitoring",              "solution_category"),
+    ("boc",                         "status"),
+    ("boc",                         "hasil"),
+    ("atg_monitoring",              "status_atg"),
+    ("atg_monitoring",              "status_interkoneksi_atg"),
+    ("atg_monitoring",              "action_plan_category"),
+    ("metering_monitoring",         "status_metering"),
+    ("metering_monitoring",         "action_plan_category"),
+    ("irkap_program",               "status_step"),
+    ("irkap_program",               "status_prognosa"),
+    ("irkap_program",               "kategori_rkap"),
+    ("irkap_program",               "disiplin"),
+    ("irkap_actual",                "status_step"),
+    ("irkap_actual",                "status_prognosa"),
+    ("irkap_actual",                "kategori_rkap"),
+    ("sap_notifications",           "notif_type"),
+    ("sap_notifications",           "system_status"),
+    ("sap_work_orders",             "system_status"),
+    ("sap_work_orders",             "order_type"),
+    ("sap_work_orders",             "maint_act_type"),
+    ("pipeline_inspection",         "fluida_service"),
+    ("zero_clamp",                  "type_damage"),
+    ("zero_clamp",                  "type_perbaikan"),
+    ("zero_clamp",                  "status"),
+    ("inspection_plan",             "type_inspection"),
+    ("inspection_plan",             "grand_result"),
+    ("readiness_jetty",             "status_operation"),
+    ("readiness_tank",              "status_operational"),
+    ("readiness_tank",              "type_tangki"),
+    ("readiness_spm",               "status_operation"),
+    ("readiness_spm",               "status_laik_operasi"),
+    ("workplan_jetty",              "action_plan_category"),
+    ("workplan_tank",               "action_plan_category"),
+    ("spm_workplan",                "action_plan_category"),
+    ("power_stream",                "status_operation"),
+    ("power_stream",                "type_equipment"),
+    ("critical_eqp_prim_sec",       "traffic_corrective"),
+    ("critical_eqp_prim_sec",       "traffic_mitigasi"),
+]
+
+_categorical_cache: dict = {}
+_categorical_last_refresh: float = 0
+_CATEGORICAL_TTL = 3600  # refresh tiap 1 jam
+
+
+def _build_categorical_values() -> dict:
+    """Query DISTINCT values dari semua kolom kategorikal."""
+    result = {}
+    try:
+        from db_equipment import get_conn
+        with get_conn() as conn:
+            for table, col in CATEGORICAL_COLUMNS:
+                try:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT {col} FROM {table} "
+                        f"WHERE {col} IS NOT NULL AND {col} != '' "
+                        f"ORDER BY {col} LIMIT 30"
+                    ).fetchall()
+                    vals = [r[0] for r in rows if r[0]]
+                    if vals:
+                        key = f"{table}.{col}"
+                        result[key] = vals
+                except Exception:
+                    pass
+    except Exception as e:
+        logging.warning(f"[CATEGORICAL] Build failed: {e}")
+    return result
+
+
+def _get_categorical_values() -> dict:
+    """Return cached categorical values, refresh if stale."""
+    global _categorical_cache, _categorical_last_refresh
+    now = time.time()
+    if not _categorical_cache or (now - _categorical_last_refresh) > _CATEGORICAL_TTL:
+        _categorical_cache = _build_categorical_values()
+        _categorical_last_refresh = now
+        logging.info(f"[CATEGORICAL] Refreshed {len(_categorical_cache)} columns")
+    return _categorical_cache
+
+
+def _build_categorical_prompt() -> str:
+    """Format categorical values jadi teks untuk dimasukkan ke prompt."""
+    vals = _get_categorical_values()
+    if not vals:
+        return ""
+    lines = ["\n=== NILAI AKTUAL DI DATABASE (gunakan ini untuk filter) ==="]
+    for key, values in vals.items():
+        formatted = ", ".join(f"'{v}'" for v in values[:20])
+        lines.append(f"{key}: {formatted}")
+    return "\n".join(lines)
+
+
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
 def _get_db_schema() -> str:
-    return DB_SCHEMA_FALLBACK
+    return DB_SCHEMA_FALLBACK + _build_categorical_prompt()
 
 
 def _get_neo4j_schema() -> str:
