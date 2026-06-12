@@ -219,8 +219,9 @@ def get_versions(doc_id):
 
 def vector_search(query_embedding: list[float], ru=None, tipe=None,
                   tag_number=None, limit=10, threshold=0.4):
+    emb_str = '[' + ','.join(map(str, query_embedding)) + ']'
     filters = ["d.status = 'ready'", "1 - (c.embedding <=> %s::vector) >= %s"]
-    where_params = [query_embedding, threshold]
+    where_params = [emb_str, threshold]
 
     if ru:
         filters.append("d.ru = %s"); where_params.append(ru)
@@ -236,7 +237,7 @@ def vector_search(query_embedding: list[float], ru=None, tipe=None,
     where = "WHERE " + " AND ".join(filters)
 
     # Final params: WHERE params + score SELECT embedding + ORDER BY embedding + LIMIT
-    final_params = where_params + [query_embedding, query_embedding, limit]
+    final_params = where_params + [emb_str, emb_str, limit]
 
     with get_conn() as conn:
         return conn.execute(f"""

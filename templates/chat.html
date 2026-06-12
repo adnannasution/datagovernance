@@ -120,11 +120,19 @@ async function sendMessage() {
   };
 
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ message, history, filters, session_id: SESSION_ID })
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 130000); // 130s timeout
+    let res;
+    try {
+      res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ message, history, filters, session_id: SESSION_ID }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await res.json();
 
     removeLoading(loadingId);
@@ -140,7 +148,10 @@ async function sendMessage() {
 
   } catch(err) {
     removeLoading(loadingId);
-    appendBubble('assistant', 'Terjadi error: ' + err.message);
+    const msg = err.name === 'AbortError'
+      ? 'Permintaan timeout — server terlalu lama merespons. Coba lagi atau sederhanakan pertanyaan.'
+      : 'Gagal terhubung ke server. Pastikan server berjalan dan coba refresh halaman.';
+    appendBubble('assistant', msg);
   } finally {
     isLoading = false;
     document.getElementById('send-btn').disabled = false;
