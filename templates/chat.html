@@ -77,6 +77,7 @@
 <script>
 let history = [];
 let isLoading = false;
+const SESSION_ID = crypto.randomUUID();
 
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -122,7 +123,7 @@ async function sendMessage() {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ message, history, filters })
+      body: JSON.stringify({ message, history, filters, session_id: SESSION_ID })
     });
     const data = await res.json();
 
@@ -162,6 +163,14 @@ function appendAssistantBubble(data) {
   div.className = 'chat-bubble bubble-assistant';
 
   let html = `<div class="bubble-content">${formatAnswer(data.answer)}</div>`;
+
+  // Rewritten query (tampilkan jika berbeda dari aslinya)
+  if (data.rewritten && data.rewritten !== data.message) {
+    html += `<div class="bubble-rewritten">
+      <span class="rewritten-label">🔄 Dipahami sebagai:</span>
+      <span class="rewritten-text">${escapeHtml(data.rewritten)}</span>
+    </div>`;
+  }
 
   // Sources (RAG)
   if (data.sources && data.sources.length > 0) {

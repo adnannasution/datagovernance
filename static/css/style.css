@@ -777,6 +777,9 @@ body {
 .bubble-sql summary { font-size:12px; color:var(--text3); cursor:pointer; padding:4px 0; }
 .bubble-sql summary:hover { color:var(--text2); }
 .sql-code { font-size:11px; font-family:monospace; background:var(--surface2); padding:8px 10px; border-radius:var(--radius); margin-top:6px; white-space:pre-wrap; color:var(--text2); border:1px solid var(--border); }
+.bubble-rewritten { margin-top:6px; font-size:11px; color:var(--text3); font-style:italic; display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; }
+.rewritten-label { color:var(--accent); font-style:normal; font-weight:500; white-space:nowrap; }
+.rewritten-text { color:var(--text2); }
 
 .chat-input-area { padding:12px; border-top:1px solid var(--border); background:var(--surface); }
 .chat-input-wrap { display:flex; gap:8px; align-items:flex-end; }
