@@ -1036,6 +1036,14 @@ def detect_intent(message: str, history: list) -> str:
     if extract_tag_from_message(message):
         return "graph"
 
+    # Agregasi + 1 domain → sql (SQL lebih tepat untuk hitung-hitungan)
+    AGGREGATION_KEYWORDS = [
+        "berapa", "jumlah", "total", "rata-rata", "average", "terbanyak",
+        "terkecil", "terbesar", "tertinggi", "terendah", "count", "sum"
+    ]
+    if domain_hits == 1 and any(kw in msg_lower for kw in AGGREGATION_KEYWORDS):
+        return "sql"
+
     # Document keywords → rag
     DOC_KEYWORDS = ["dokumen", "sop", "prosedur", "manual", "laporan", "pdf", "upload"]
     if any(kw in msg_lower for kw in DOC_KEYWORDS):
