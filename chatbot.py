@@ -381,6 +381,50 @@ JOIN doc_tag_links t ON d.id = t.doc_id
 WHERE t.tag_number = 'XX-XXXX'
 LIMIT 10
 
+-- === CONTOH QUERY AGREGASI ===
+
+-- Jumlah bad actor per RU:
+SELECT ru, COUNT(*) AS jumlah
+FROM bad_actor_monitoring
+GROUP BY ru ORDER BY jumlah DESC
+
+-- Total anggaran IRKAP per RU:
+SELECT refinery_unit, SUM(nilai_anggaran_idr) AS total_idr, SUM(nilai_anggaran_usd) AS total_usd
+FROM irkap_program
+GROUP BY refinery_unit ORDER BY total_idr DESC
+
+-- Rata-rata MTBF per RU:
+SELECT b.ru, ROUND(AVG(b.mtbf)::numeric, 2) AS avg_mtbf, COUNT(*) AS jumlah_equipment
+FROM boc b WHERE b.mtbf > 0
+GROUP BY b.ru ORDER BY avg_mtbf ASC
+
+-- Top 10 equipment dengan bad actor terbanyak:
+SELECT tag_number, COUNT(*) AS jumlah
+FROM bad_actor_monitoring
+GROUP BY tag_number ORDER BY jumlah DESC LIMIT 10
+
+-- Jumlah equipment per criticality:
+SELECT criticality, COUNT(*) AS jumlah
+FROM master_data_equipment
+GROUP BY criticality ORDER BY criticality
+
+-- Equipment dengan sisa umur pipeline terpendek:
+SELECT tag_number, refinery_unit, rem_life_years, fluida_service
+FROM pipeline_inspection
+WHERE rem_life_years IS NOT NULL
+ORDER BY rem_life_years ASC LIMIT 10
+
+-- Jumlah work order per status:
+SELECT system_status, COUNT(*) AS jumlah
+FROM sap_work_orders
+GROUP BY system_status ORDER BY jumlah DESC
+
+-- Total zero clamp yang masih terpasang per RU:
+SELECT ru, COUNT(*) AS masih_terpasang
+FROM zero_clamp
+WHERE tanggal_dilepas IS NULL
+GROUP BY ru ORDER BY masih_terpasang DESC
+
 === PEMETAAN ISTILAH BAHASA MANUSIA → KOLOM DATABASE ===
 
 Jika user menyebut kondisi/status tanpa menyebut nama kolom/tabel,
@@ -776,6 +820,74 @@ def extract_tag_from_message(message: str) -> str | None:
     pattern = r'\b[A-Z0-9]{2,}-[A-Z0-9][-A-Z0-9]*\b'
     matches = re.findall(pattern, message.upper())
     return matches[0] if matches else None
+
+
+# ─── Query Rewriter ───────────────────────────────────────────────────────────
+
+REWRITER_PROMPT = """Kamu adalah query normalizer untuk sistem data governance Pertamina.
+
+Tugasmu: susun ulang pertanyaan user menjadi pertanyaan yang jelas, lengkap, dan mudah dipahami sistem.
+
+PANDUAN NORMALISASI:
+
+1. PERBAIKI typo, singkatan, bahasa informal:
+   "yg" → "yang", "blm" → "belum", "udh" → "sudah", "gak/ga" → "tidak"
+   "critA" → "criticality A", "BA" → "bad actor", "WO" → "work order"
+
+2. LENGKAPI konteks dari history percakapan:
+   "berapa jumlahnya?" + history ada tentang bad actor RU IV
+   → "Berapa jumlah bad actor di RU IV?"
+
+   "yang itu detail dong" + history ada tag XX-XXXX
+   → "Tampilkan detail lengkap equipment XX-XXXX"
+
+3. NORMALISASI nama RU ke bentuk lengkap:
+   RU II / RU2 / Dumai          → "RU II Dumai"
+   RU III / RU3 / Plaju         → "RU III Plaju"
+   RU IV / RU4 / Cilacap        → "RU IV Cilacap"
+   RU V / RU5 / Balikpapan      → "RU V Balikpapan"
+   RU VI / RU6 / Balongan       → "RU VI Balongan"
+   RU VII / RU7 / Kasim         → "RU VII Kasim"
+
+4. KONVERSI waktu relatif ke konteks yang jelas:
+   "bulan ini"  → "bulan Juni 2026"
+   "tahun ini"  → "tahun 2026"
+   "tahun lalu" → "tahun 2025"
+   "terbaru"    → "paling baru berdasarkan tanggal"
+   "sudah lewat" / "expired" → "tanggal sudah melewati hari ini (2026-06-12)"
+
+5. PERTAHANKAN semua info penting dari pertanyaan asli:
+   tag number, nama equipment, RU, angka, kondisi yang disebut
+
+6. Jika pertanyaan sudah jelas → kembalikan apa adanya tanpa ubah
+
+OUTPUT: kembalikan HANYA pertanyaan yang sudah dinormalisasi, tanpa penjelasan apapun."""
+
+
+def rewrite_query(message: str, history: list) -> str:
+    """Normalisasi pertanyaan user sebelum diproses sistem."""
+    history_text = ""
+    if history:
+        history_text = "\n".join([
+            f"{m['role']}: {m['content'][:150]}" for m in history[-4:]
+        ])
+
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            max_tokens=200,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": REWRITER_PROMPT},
+                {"role": "user", "content": f"History:\n{history_text}\n\nPertanyaan: {message}"}
+            ]
+        )
+        rewritten = resp.choices[0].message.content.strip()
+        if rewritten:
+            return rewritten
+    except Exception:
+        pass
+    return message
 
 
 # ─── Intent Router ────────────────────────────────────────────────────────────
@@ -1330,19 +1442,23 @@ def chat(message: str, history: list = None, filters: dict = None) -> dict:
     if not history:
         history = []
 
-    intent = detect_intent(message, history)
+    # Layer 1: Rewrite — normalisasi pertanyaan sebelum diproses
+    clean_message = rewrite_query(message, history)
+
+    intent = detect_intent(clean_message, history)
 
     if intent == "rag":
-        result = handle_rag(message, filters)
+        result = handle_rag(clean_message, filters)
     elif intent == "sql":
-        result = handle_sql(message, history)
+        result = handle_sql(clean_message, history)
     elif intent == "graph":
-        result = handle_graph(message)
+        result = handle_graph(clean_message)
     elif intent == "hybrid":
-        result = handle_hybrid(message, history)
+        result = handle_hybrid(clean_message, history)
     else:
-        result = handle_general(message, history)
+        result = handle_general(clean_message, history)
 
     result["intent"] = intent
     result["message"] = message
+    result["rewritten"] = clean_message  # debug: tampilkan hasil rewrite
     return result
