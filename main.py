@@ -535,28 +535,23 @@ async def api_neo4j_graph(tag: str = "", depth: int = 1):
 
 @app.get("/api/neo4j/tags/search")
 async def api_neo4j_tags_search(q: str = "", limit: int = 20):
-    """Search tag numbers dari Neo4j Equipment nodes."""
+    """Search tag numbers dari PostgreSQL master_data_equipment (indexed, cepat untuk 200k+ tag)."""
+    if not q or len(q.strip()) < 2:
+        return {"tags": []}
     try:
-        from neo4j_sync import get_driver
-        driver = get_driver()
-        if not driver:
-            return {"tags": []}
-        with driver.session() as session:
-            if q:
-                rows = session.run(
-                    "MATCH (e:Equipment) WHERE e.tag_number CONTAINS toUpper($q) "
-                    "OR toLower(e.description) CONTAINS toLower($q) "
-                    "RETURN e.tag_number AS tag, e.description AS desc "
-                    "ORDER BY e.tag_number LIMIT $limit",
-                    {"q": q.upper(), "limit": limit}
-                ).data()
-            else:
-                rows = session.run(
-                    "MATCH (e:Equipment) RETURN e.tag_number AS tag, e.description AS desc "
-                    "ORDER BY e.tag_number LIMIT $limit",
-                    {"limit": limit}
-                ).data()
-        driver.close()
+        from db_equipment import get_conn
+        q = q.strip()
+        with get_conn() as conn:
+            rows = conn.execute(
+                """SELECT equipment AS tag, description AS desc
+                   FROM master_data_equipment
+                   WHERE equipment ILIKE %s OR description ILIKE %s
+                   ORDER BY
+                     CASE WHEN equipment ILIKE %s THEN 0 ELSE 1 END,
+                     equipment
+                   LIMIT %s""",
+                (f"{q}%", f"%{q}%", f"{q}%", limit)
+            ).fetchall()
         return {"tags": [{"tag": r["tag"], "desc": r["desc"] or ""} for r in rows]}
     except Exception as e:
         return {"tags": [], "error": str(e)}
