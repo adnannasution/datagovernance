@@ -62,11 +62,17 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
     <div class="card-title" style="margin:0">Data Browser</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <form method="get" style="display:flex;gap:8px">
-        <input type="text" name="search" value="{{ search }}" placeholder="Cari..." style="width:220px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px"/>
-        <button type="submit" class="btn btn-primary">Cari</button>
-        {% if search %}<a href="/catalog/{{ tbl.table }}" class="btn">Reset</a>{% endif %}
-      </form>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="search-input" placeholder="Cari..." style="width:220px;padding:6px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px"/>
+        <button class="btn btn-primary" onclick="doSearch()">Cari</button>
+        <button class="btn" id="reset-btn" style="display:none" onclick="resetSearch()">Reset</button>
+      </div>
+      <select id="limit-select" onchange="changeLimit()" style="padding:6px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);font-size:13px">
+        <option value="10" selected>10 baris</option>
+        <option value="25">25 baris</option>
+        <option value="50">50 baris</option>
+        <option value="100">100 baris</option>
+      </select>
       <div style="position:relative">
         <button class="btn btn-secondary" onclick="toggleColPicker()" id="col-picker-btn">
           &#9881; Kolom <span id="col-count">6</span>
@@ -87,50 +93,27 @@
     </div>
   </div>
 
-  <div style="overflow-x:auto">
-    <table class="data-table" style="min-width:max-content">
-      <thead>
+  <div style="overflow-x:auto;max-height:520px;overflow-y:auto;position:relative" id="table-wrap">
+    <table class="data-table" style="min-width:max-content" id="data-table">
+      <thead id="table-head">
         <tr>
           {% for col in cols %}
-          <th class="col-{{ loop.index0 }}" style="white-space:nowrap{% if loop.index0 >= 6 %};display:none{% endif %}">{{ col.column_name }}</th>
+          <th class="col-{{ loop.index0 }} sortable-th" data-col="{{ col.column_name }}"
+              style="white-space:nowrap;position:sticky;top:0;z-index:2;background:var(--bg2,#f8fafc);cursor:pointer;user-select:none{% if loop.index0 >= 6 %};display:none{% endif %}">
+            {{ col.column_name }} <span class="sort-icon" data-col="{{ col.column_name }}">⇅</span>
+          </th>
           {% endfor %}
         </tr>
       </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          {% for col in cols %}
-          <td class="col-{{ loop.index0 }}" style="white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px{% if loop.index0 >= 6 %};display:none{% endif %}">
-            {{ row[col.column_name] if row[col.column_name] is not none else '—' }}
-          </td>
-          {% endfor %}
-        </tr>
-        {% else %}
-        <tr><td colspan="{{ cols|length }}" class="empty-text">Tidak ada data</td></tr>
-        {% endfor %}
+      <tbody id="table-body">
+        <tr><td colspan="{{ cols|length }}" style="text-align:center;padding:2rem;color:var(--text3)">Memuat data...</td></tr>
       </tbody>
     </table>
   </div>
 
-  <div class="pagination-wrap">
-    <span class="pagination-info">
-      Menampilkan {{ offset + 1 }}–{{ [offset + limit, total]|min }} dari {{ "{:,}".format(total) }} data
-    </span>
-    <div class="pagination-btns">
-      {% if page > 1 %}
-      <a href="?page=1&search={{ search }}" class="pag-btn">«</a>
-      <a href="?page={{ page-1 }}&search={{ search }}" class="pag-btn">‹</a>
-      {% endif %}
-
-      {% for p in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
-      <a href="?page={{ p }}&search={{ search }}" class="pag-btn {% if p == page %}active{% endif %}">{{ p }}</a>
-      {% endfor %}
-
-      {% if page < total_pages %}
-      <a href="?page={{ page+1 }}&search={{ search }}" class="pag-btn">›</a>
-      <a href="?page={{ total_pages }}&search={{ search }}" class="pag-btn">»</a>
-      {% endif %}
-    </div>
+  <div class="pagination-wrap" id="pagination-wrap" style="margin-top:0.75rem">
+    <span class="pagination-info" id="pag-info"></span>
+    <div class="pagination-btns" id="pag-btns"></div>
   </div>
 </div>
 
@@ -138,38 +121,171 @@
 
 {% block scripts %}
 <script>
+const TABLE_NAME = "{{ tbl.table }}";
+const COLS = {{ cols | tojson }};
 const DEFAULT_COLS = 6;
 
+let state = { page: 1, limit: 10, search: "", sort_col: "", sort_dir: "asc" };
+
+async function loadRows() {
+  const params = new URLSearchParams({
+    page: state.page,
+    limit: state.limit,
+    search: state.search,
+    sort_col: state.sort_col,
+    sort_dir: state.sort_dir
+  });
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = `<tr><td colspan="${COLS.length}" style="text-align:center;padding:1.5rem;color:var(--text3)">Memuat...</td></tr>`;
+
+  const res = await fetch(`/api/table/${TABLE_NAME}/rows?${params}`);
+  const data = await res.json();
+  renderRows(data);
+}
+
+function renderRows(data) {
+  const tbody = document.getElementById("table-body");
+  const colCount = COLS.length;
+
+  if (!data.rows || data.rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${colCount}" class="empty-text">Tidak ada data</td></tr>`;
+  } else {
+    tbody.innerHTML = data.rows.map(row => {
+      const cells = COLS.map((col, i) => {
+        const val = row[col.column_name];
+        const display = (val === null || val === undefined) ? "—" : String(val);
+        const hidden = i >= DEFAULT_COLS ? ";display:none" : "";
+        return `<td class="col-${i}" style="white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px${hidden}" title="${display.replace(/"/g,'&quot;')}">${display}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+  }
+
+  // restore col visibility
+  document.querySelectorAll(".col-toggle").forEach((cb, i) => {
+    if (!cb.checked) {
+      document.querySelectorAll(`.col-${i}`).forEach(el => el.style.display = "none");
+    }
+  });
+
+  renderPagination(data);
+  updateSortIcons();
+}
+
+function renderPagination(data) {
+  const info = document.getElementById("pag-info");
+  const btns = document.getElementById("pag-btns");
+  const { page, total_pages, total, offset, limit } = data;
+  const from = total === 0 ? 0 : offset + 1;
+  const to = Math.min(offset + limit, total);
+  info.textContent = `Menampilkan ${from.toLocaleString()}–${to.toLocaleString()} dari ${total.toLocaleString()} data`;
+
+  let html = "";
+  if (page > 1) {
+    html += `<a class="pag-btn" onclick="goPage(1)">«</a>`;
+    html += `<a class="pag-btn" onclick="goPage(${page-1})">‹</a>`;
+  }
+  const start = Math.max(1, page - 2);
+  const end = Math.min(total_pages, page + 2);
+  for (let p = start; p <= end; p++) {
+    html += `<a class="pag-btn${p===page?' active':''}" onclick="goPage(${p})">${p}</a>`;
+  }
+  if (page < total_pages) {
+    html += `<a class="pag-btn" onclick="goPage(${page+1})">›</a>`;
+    html += `<a class="pag-btn" onclick="goPage(${total_pages})">»</a>`;
+  }
+  btns.innerHTML = html;
+}
+
+function goPage(p) {
+  state.page = p;
+  loadRows();
+}
+
+function doSearch() {
+  state.search = document.getElementById("search-input").value.trim();
+  state.page = 1;
+  document.getElementById("reset-btn").style.display = state.search ? "" : "none";
+  loadRows();
+}
+
+function resetSearch() {
+  state.search = "";
+  document.getElementById("search-input").value = "";
+  document.getElementById("reset-btn").style.display = "none";
+  state.page = 1;
+  loadRows();
+}
+
+function changeLimit() {
+  state.limit = parseInt(document.getElementById("limit-select").value);
+  state.page = 1;
+  loadRows();
+}
+
+document.getElementById("search-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") doSearch();
+});
+
+// Sorting
+document.querySelectorAll(".sortable-th").forEach(th => {
+  th.addEventListener("click", () => {
+    const col = th.dataset.col;
+    if (state.sort_col === col) {
+      state.sort_dir = state.sort_dir === "asc" ? "desc" : "asc";
+    } else {
+      state.sort_col = col;
+      state.sort_dir = "asc";
+    }
+    state.page = 1;
+    loadRows();
+  });
+});
+
+function updateSortIcons() {
+  document.querySelectorAll(".sort-icon").forEach(el => {
+    const col = el.dataset.col;
+    if (col === state.sort_col) {
+      el.textContent = state.sort_dir === "asc" ? "↑" : "↓";
+    } else {
+      el.textContent = "⇅";
+    }
+  });
+}
+
+// Column picker
 function toggleColPicker() {
-    const p = document.getElementById('col-picker');
-    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  const p = document.getElementById("col-picker");
+  p.style.display = p.style.display === "none" ? "block" : "none";
 }
 
 function toggleCol(idx, show) {
-    document.querySelectorAll(`.col-${idx}`).forEach(el => {
-        el.style.display = show ? '' : 'none';
-    });
-    updateColCount();
+  document.querySelectorAll(`.col-${idx}`).forEach(el => {
+    el.style.display = show ? "" : "none";
+  });
+  updateColCount();
 }
 
 function updateColCount() {
-    const checked = document.querySelectorAll('.col-toggle:checked').length;
-    document.getElementById('col-count').textContent = checked;
+  const checked = document.querySelectorAll(".col-toggle:checked").length;
+  document.getElementById("col-count").textContent = checked;
 }
 
 function resetCols() {
-    document.querySelectorAll('.col-toggle').forEach((cb, i) => {
-        const show = i < DEFAULT_COLS;
-        cb.checked = show;
-        toggleCol(i, show);
-    });
+  document.querySelectorAll(".col-toggle").forEach((cb, i) => {
+    const show = i < DEFAULT_COLS;
+    cb.checked = show;
+    toggleCol(i, show);
+  });
 }
 
-// Close picker when clicking outside
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('#col-picker') && !e.target.closest('#col-picker-btn')) {
-        document.getElementById('col-picker').style.display = 'none';
-    }
+document.addEventListener("click", function(e) {
+  if (!e.target.closest("#col-picker") && !e.target.closest("#col-picker-btn")) {
+    document.getElementById("col-picker").style.display = "none";
+  }
 });
+
+// Initial load
+loadRows();
 </script>
 {% endblock %}
