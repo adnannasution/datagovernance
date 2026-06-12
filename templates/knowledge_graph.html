@@ -369,6 +369,18 @@
 
 </div><!-- /tab-visualisasi -->
 
+<!-- Sync Notification Banner -->
+<div id="sync-notification-banner" style="display:none;position:fixed;top:16px;right:16px;z-index:9999;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,0.15);border-radius:10px;overflow:hidden">
+  <div id="sync-notif-inner" style="padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
+    <span id="sync-notif-icon" style="font-size:20px;flex-shrink:0;margin-top:1px"></span>
+    <div style="flex:1;min-width:0">
+      <div id="sync-notif-title" style="font-weight:600;font-size:14px;margin-bottom:2px"></div>
+      <div id="sync-notif-body" style="font-size:12px;opacity:0.85;line-height:1.5"></div>
+    </div>
+    <button onclick="closeSyncBanner()" style="background:none;border:none;cursor:pointer;font-size:16px;opacity:0.6;flex-shrink:0;padding:0;line-height:1">×</button>
+  </div>
+</div>
+
 <!-- TAB: Sync Management -->
 <div id="tab-sync" class="tab-panel" style="display:none">
 
@@ -460,6 +472,16 @@ let tableSyncInterval = null;
 let graphNetwork = null;
 let coverageChart = null;
 let coverageLoaded = false;
+
+// ─── Sync Flag Keys (localStorage) ───────────────────────────
+const SYNC_FLAGS = {
+  full:    { key: 'syncPending_full',    statusUrl: '/api/neo4j/sync/status',                  label: 'Full Sync' },
+  tables:  { key: 'syncPending_tables',  statusUrl: '/api/neo4j/sync/tables/status',            label: 'Table Sync' },
+  domain:  { key: 'syncPending_domain',  statusUrl: '/api/neo4j/sync/domain-relations/status',  label: 'Domain Relations Sync' },
+};
+function markSyncStarted(type) {
+  localStorage.setItem(SYNC_FLAGS[type].key, JSON.stringify({ startedAt: Date.now() }));
+}
 
 // ─── Tab Switching ────────────────────────────────────────────
 
@@ -626,6 +648,7 @@ async function startTableSync() {
 
         if (!sd.running && sd.last_result !== null) {
           clearInterval(tableSyncInterval);
+          localStorage.removeItem(SYNC_FLAGS.tables.key);
           document.getElementById('table-sync-progress').style.width = '100%';
           showTableSyncResult(sd.last_result);
           btn.disabled = false;
@@ -982,6 +1005,7 @@ async function resetRelations(btn) {
 }
 
 async function startDomainRelSync() {
+  markSyncStarted('domain');
   const btn = document.getElementById('domain-rel-btn');
   const statusEl = document.getElementById('domain-rel-status');
   btn.disabled = true;
@@ -1003,6 +1027,7 @@ async function startDomainRelSync() {
         const sd = await sr.json();
         if (!sd.running && sd.last_result !== null) {
           clearInterval(domainRelInterval);
+          localStorage.removeItem(SYNC_FLAGS.domain.key);
           const r = sd.last_result;
           if (r.error) {
             statusEl.style.color = 'var(--danger)';
@@ -1050,6 +1075,7 @@ async function startSync() {
 
         if (!sd.running && sd.last_result) {
           clearInterval(syncInterval);
+          localStorage.removeItem(SYNC_FLAGS.full.key);
           document.getElementById('sync-progress').style.width = '100%';
           showResult(sd.last_result);
           btn.disabled = false;
@@ -1087,5 +1113,137 @@ function showResult(r) {
   `;
   document.getElementById('sync-msg').textContent = 'Sync selesai';
 }
+
+// ─── Sync Notification (cek status saat halaman dibuka) ───────
+
+function closeSyncBanner() {
+  document.getElementById('sync-notification-banner').style.display = 'none';
+}
+
+function showSyncBanner(title, body, success) {
+  const banner = document.getElementById('sync-notification-banner');
+  const inner  = document.getElementById('sync-notif-inner');
+  document.getElementById('sync-notif-icon').textContent  = success ? '✅' : '⚠️';
+  document.getElementById('sync-notif-title').textContent = title;
+  document.getElementById('sync-notif-body').innerHTML    = body;
+  inner.style.background = success ? '#f0fdf4' : '#fff8e1';
+  inner.style.color      = success ? '#166534' : '#78350f';
+  banner.style.display   = 'block';
+  // Auto-close after 12 seconds
+  setTimeout(closeSyncBanner, 12000);
+}
+
+function formatDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} detik`;
+  return `${Math.floor(s/60)} menit ${s%60} detik`;
+}
+
+async function resumePollingIfRunning(type, flag) {
+  // Called when page opens and sync was started but we don't know result yet
+  const statusUrl = flag.statusUrl;
+  let pct = 30;
+  const interval = setInterval(async () => {
+    try {
+      const sr = await fetch(statusUrl);
+      const sd = await sr.json();
+      pct = Math.min(pct + 3, 90);
+      if (!sd.running && sd.last_result !== null) {
+        clearInterval(interval);
+        localStorage.removeItem(flag.key);
+        // Show inline result too if on sync tab
+        if (type === 'tables' && sd.last_result) showTableSyncResult(sd.last_result);
+        if (type === 'full'   && sd.last_result) showResult(sd.last_result);
+        // Banner handled by checkSyncOnLoad already — skip duplicate
+      }
+    } catch(e) {}
+  }, 3000);
+}
+
+async function checkSyncOnLoad() {
+  const notifications = [];
+
+  for (const [type, flag] of Object.entries(SYNC_FLAGS)) {
+    const raw = localStorage.getItem(flag.key);
+    if (!raw) continue;
+
+    let pending;
+    try { pending = JSON.parse(raw); } catch { localStorage.removeItem(flag.key); continue; }
+
+    try {
+      const sr = await fetch(flag.statusUrl);
+      const sd = await sr.json();
+
+      if (sd.running) {
+        // Sync masih berjalan — resume polling di background
+        resumePollingIfRunning(type, flag);
+        notifications.push({ title: `${flag.label} Masih Berjalan`, body: 'Sync sedang berjalan di server...', success: true });
+      } else if (sd.last_result !== null) {
+        // Sync sudah selesai saat browser tutup
+        localStorage.removeItem(flag.key);
+        const dur = pending.startedAt ? formatDuration(Date.now() - pending.startedAt) : '';
+        const durText = dur ? ` (durasi ±${dur})` : '';
+
+        if (type === 'full') {
+          const r = sd.last_result;
+          const ok = r.success;
+          notifications.push({
+            title: ok ? `${flag.label} Selesai` : `${flag.label} Gagal`,
+            body: `${ok ? 'Berhasil' : 'Gagal'} sync ${r.synced ?? 0} dari ${r.total ?? 0} dokumen${durText}`,
+            success: ok
+          });
+        } else if (type === 'tables') {
+          const r = sd.last_result;
+          const entries = Object.entries(r || {});
+          const errors  = entries.filter(([,v]) => v.error).length;
+          const ok = errors === 0;
+          notifications.push({
+            title: ok ? `${flag.label} Selesai` : `${flag.label} Selesai (ada error)`,
+            body: `${entries.length} tabel diproses, ${errors} error${durText}`,
+            success: ok
+          });
+        } else if (type === 'domain') {
+          notifications.push({
+            title: `${flag.label} Selesai`,
+            body: `Relasi domain telah tersinkron${durText}`,
+            success: true
+          });
+        }
+      }
+    } catch(e) {
+      // Server mungkin restart, biarkan flag tetap untuk cek berikutnya
+    }
+  }
+
+  if (notifications.length > 0) {
+    const n = notifications[notifications.length - 1];
+    const allBodies = notifications.map(x => `<strong>${x.title}</strong>: ${x.body}`).join('<br>');
+    showSyncBanner(
+      notifications.length > 1 ? 'Status Sync' : n.title,
+      notifications.length > 1 ? allBodies : n.body,
+      notifications.every(x => x.success)
+    );
+    // Switch ke tab sync agar user lihat detail
+    const syncTabBtn = document.querySelector('.tab-btn[onclick*="sync"]');
+    if (syncTabBtn && notifications.some(x => !x.success)) syncTabBtn.click();
+  }
+}
+
+// Tandai sync dimulai saat tombol ditekan
+const _origStartSync = startSync;
+startSync = async function() {
+  markSyncStarted('full');
+  return _origStartSync();
+};
+const _origStartTableSync = startTableSync;
+startTableSync = async function() {
+  markSyncStarted('tables');
+  return _origStartTableSync();
+};
+
+// Cek saat halaman pertama kali dibuka
+document.addEventListener('DOMContentLoaded', () => {
+  checkSyncOnLoad();
+});
 </script>
 {% endblock %}
