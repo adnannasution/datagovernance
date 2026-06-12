@@ -220,21 +220,23 @@ def get_versions(doc_id):
 def vector_search(query_embedding: list[float], ru=None, tipe=None,
                   tag_number=None, limit=10, threshold=0.4):
     filters = ["d.status = 'ready'", "1 - (c.embedding <=> %s::vector) >= %s"]
-    params = [query_embedding, threshold]
+    where_params = [query_embedding, threshold]
 
     if ru:
-        filters.append("d.ru = %s"); params.append(ru)
+        filters.append("d.ru = %s"); where_params.append(ru)
     if tipe:
-        filters.append("d.tipe_dokumen = %s"); params.append(tipe)
+        filters.append("d.tipe_dokumen = %s"); where_params.append(tipe)
 
     join_tag = ""
     if tag_number:
         join_tag = "JOIN doc_tag_links t ON t.doc_id = d.id"
         filters.append("t.tag_number = %s")
-        params.append(tag_number.upper())
+        where_params.append(tag_number.upper())
 
     where = "WHERE " + " AND ".join(filters)
-    params.append(limit)
+
+    # Final params: WHERE params + score SELECT embedding + ORDER BY embedding + LIMIT
+    final_params = where_params + [query_embedding, query_embedding, limit]
 
     with get_conn() as conn:
         return conn.execute(f"""
@@ -258,4 +260,4 @@ def vector_search(query_embedding: list[float], ru=None, tipe=None,
             {where}
             ORDER BY c.embedding <=> %s::vector
             LIMIT %s
-        """, [query_embedding] + params).fetchall()
+        """, final_params).fetchall()
