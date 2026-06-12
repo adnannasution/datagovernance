@@ -1295,45 +1295,6 @@ Sertakan insight singkat jika relevan."""
         "total_rows": len(data),
         "error": None
     }
-        }
-
-    if not data:
-        return {
-            "type": "sql",
-            "answer": "Query berhasil dijalankan tapi tidak ada data yang ditemukan.",
-            "sql": sql,
-            "data": [],
-            "error": None
-        }
-
-    # Format jawaban dari data
-    data_preview = json.dumps(data[:10], default=str, ensure_ascii=False)
-    fmt_resp = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=600,
-        messages=[
-            {
-                "role": "system",
-                "content": """Kamu adalah asisten data analyst Pertamina.
-Formatkan hasil query database berikut menjadi jawaban yang mudah dibaca dalam Bahasa Indonesia.
-Gunakan bullet points atau tabel teks jika data banyak.
-Sertakan insight singkat jika relevan."""
-            },
-            {
-                "role": "user",
-                "content": f"Pertanyaan: {message}\n\nHasil query ({len(data)} baris):\n{data_preview}"
-            }
-        ]
-    )
-
-    return {
-        "type": "sql",
-        "answer": fmt_resp.choices[0].message.content,
-        "sql": sql,
-        "data": data[:20],
-        "total_rows": len(data),
-        "error": None
-    }
 
 # ─── SQL Fallback untuk tag yang tidak ada di Neo4j ──────────────────────────
 
