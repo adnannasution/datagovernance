@@ -1299,12 +1299,16 @@ Jawab HANYA satu kata: rag / sql / graph / hybrid / general"""
 
 # ─── RAG Handler ──────────────────────────────────────────────────────────────
 
-def handle_rag(message: str, filters: dict = None) -> dict:
+def handle_rag(message: str, filters: dict = None, status_cb=None) -> dict:
     """Vector search dokumen lalu generate jawaban."""
     from embedder import get_embedding
     from db import vector_search
 
+    if status_cb:
+        status_cb({"step": "embed", "label": "Membuat embedding pertanyaan..."})
     query_emb = get_embedding(message)
+    if status_cb:
+        status_cb({"step": "search", "label": "Mencari dokumen relevan di vector database..."})
     results = vector_search(
         query_embedding=query_emb,
         ru=filters.get("ru") if filters else None,
@@ -1350,6 +1354,8 @@ def handle_rag(message: str, filters: dict = None) -> dict:
 
     context = "\n\n---\n\n".join(context_parts)
 
+    if status_cb:
+        status_cb({"step": "generate", "label": "Merangkum jawaban dari dokumen..."})
     resp = client.chat.completions.create(
         model=MODEL,
         max_tokens=800,
@@ -1439,10 +1445,12 @@ INSTRUKSI:
     return re.sub(r'```sql|```', '', sql).strip()
 
 
-def handle_sql(message: str, history: list = None) -> dict:
+def handle_sql(message: str, history: list = None, status_cb=None) -> dict:
     """Generate SQL dari pertanyaan, execute, lalu format jawaban. Retry 1x jika gagal."""
     from db_equipment import get_conn
 
+    if status_cb:
+        status_cb({"step": "gen_sql", "label": "Membuat query SQL..."})
     sql = _generate_sql(message)
 
     if not sql.upper().startswith("SELECT"):
@@ -1463,6 +1471,8 @@ def handle_sql(message: str, history: list = None) -> dict:
     # Execute — retry 1x jika error
     data = []
     last_error = None
+    if status_cb:
+        status_cb({"step": "exec_sql", "label": "Menjalankan query ke database..."})
     for attempt in range(2):
         try:
             with get_conn() as conn:
@@ -1474,6 +1484,8 @@ def handle_sql(message: str, history: list = None) -> dict:
             last_error = str(e)
             if attempt == 0:
                 logging.warning(f"[SQL RETRY] attempt 1 failed: {e}")
+                if status_cb:
+                    status_cb({"step": "retry_sql", "label": "Memperbaiki query SQL..."})
                 sql = _generate_sql(message, previous_sql=sql, error=last_error)
                 if not sql.upper().startswith("SELECT"):
                     break
@@ -1509,6 +1521,8 @@ def handle_sql(message: str, history: list = None) -> dict:
         }
 
     data_preview = json.dumps(data[:10], default=str, ensure_ascii=False)
+    if status_cb:
+        status_cb({"step": "format_sql", "label": "Memformat hasil data..."})
     fmt_resp = client.chat.completions.create(
         model=MODEL,
         max_tokens=600,
@@ -1635,7 +1649,7 @@ INSTRUKSI:
 - Kembalikan HANYA Cypher query, tanpa penjelasan, tanpa markdown backtick"""
 
 
-def handle_graph(message: str) -> dict:
+def handle_graph(message: str, status_cb=None) -> dict:
     """Generate Cypher query, execute di Neo4j, format jawaban.
     If an equipment tag is detected, use GraphRAG for rich context first."""
     try:
@@ -1644,10 +1658,14 @@ def handle_graph(message: str) -> dict:
         # Try GraphRAG first if tag detected
         tag = extract_tag_from_message(message)
         if tag:
+            if status_cb:
+                status_cb({"step": "graph_tag", "label": f"Mencari data equipment {tag} di Knowledge Graph..."})
             try:
                 graph_ctx = get_equipment_context_from_graph(tag)
                 if graph_ctx:
                     ctx_text = _format_graph_context(tag, graph_ctx)
+                    if status_cb:
+                        status_cb({"step": "format_graph", "label": "Merangkum data dari Knowledge Graph..."})
                     fmt_resp = client.chat.completions.create(
                         model=MODEL,
                         max_tokens=800,
@@ -1676,6 +1694,8 @@ Jawab secara terstruktur dan informatif."""
                 pass  # Fall back to Cypher generation
 
         # Generate Cypher (fallback or no tag) — retry 1x jika error
+        if status_cb:
+            status_cb({"step": "gen_cypher", "label": "Membuat Cypher query..."})
         def _run_cypher(prev_cypher=None, error=None):
             extra = ""
             if prev_cypher and error:
@@ -1694,6 +1714,8 @@ Jawab secara terstruktur dan informatif."""
         cypher = _run_cypher()
         data = []
         last_error = None
+        if status_cb:
+            status_cb({"step": "exec_cypher", "label": "Menjalankan query di Knowledge Graph..."})
         for attempt in range(2):
             try:
                 with get_driver() as driver:
@@ -1705,6 +1727,8 @@ Jawab secara terstruktur dan informatif."""
                 last_error = str(e)
                 if attempt == 0:
                     logging.warning(f"[CYPHER RETRY] attempt 1 failed: {e}")
+                    if status_cb:
+                        status_cb({"step": "retry_cypher", "label": "Memperbaiki Cypher query..."})
                     cypher = _run_cypher(prev_cypher=cypher, error=last_error)
 
         if last_error:
@@ -1736,6 +1760,8 @@ Jawab secara terstruktur dan informatif."""
             }
 
         data_text = json.dumps(data[:10], default=str, ensure_ascii=False)
+        if status_cb:
+            status_cb({"step": "format_graph", "label": "Merangkum data dari Knowledge Graph..."})
         fmt_resp = client.chat.completions.create(
             model=MODEL,
             max_tokens=500,
@@ -1775,14 +1801,14 @@ Jawab secara terstruktur dan informatif."""
 
 # ─── Hybrid Handler ───────────────────────────────────────────────────────────
 
-def handle_hybrid(message: str, history: list = None) -> dict:
+def handle_hybrid(message: str, history: list = None, status_cb=None) -> dict:
     """Kombinasi RAG + SQL + Graph (jika tag terdeteksi), gabungkan hasilnya."""
     try:
-        rag_result = handle_rag(message)
+        rag_result = handle_rag(message, status_cb=status_cb)
     except Exception:
         rag_result = {"answer": "", "sources": [], "data": []}
     try:
-        sql_result = handle_sql(message, history)
+        sql_result = handle_sql(message, history, status_cb=status_cb)
     except Exception:
         sql_result = {"answer": "", "data": [], "sql": ""}
 
@@ -1801,6 +1827,8 @@ def handle_hybrid(message: str, history: list = None) -> dict:
     tag = extract_tag_from_message(message)
     if tag:
         try:
+            if status_cb:
+                status_cb({"step": "graph_tag", "label": f"Mencari data equipment {tag} di Knowledge Graph..."})
             graph_ctx = get_equipment_context_from_graph(tag)
             if graph_ctx:
                 graph_context_text = _format_graph_context(tag, graph_ctx)
@@ -1809,6 +1837,8 @@ def handle_hybrid(message: str, history: list = None) -> dict:
             pass
 
     # Final synthesis
+    if status_cb:
+        status_cb({"step": "format_graph", "label": "Merangkum jawaban dari semua sumber..."})
     try:
         synth = client.chat.completions.create(
             model=MODEL,
@@ -1884,12 +1914,13 @@ Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel at
 # ─── Main Chat Function ───────────────────────────────────────────────────────
 
 def chat(message: str, history: list = None, filters: dict = None,
-         session_id: str = None) -> dict:
+         session_id: str = None, status_cb=None) -> dict:
     """
     Entry point utama. Router ke handler yang tepat.
     history   : list of {role, content} dari frontend (opsional)
     filters   : {ru, tag_number}
     session_id: untuk server-side session memory
+    status_cb : optional callable(event_dict) for streaming status
     """
     # Ambil history dari server jika ada session_id
     if session_id:
@@ -1900,18 +1931,32 @@ def chat(message: str, history: list = None, filters: dict = None,
         history = []
 
     # Layer 1: Rewrite — normalisasi pertanyaan
+    if status_cb:
+        status_cb({"step": "rewrite", "label": "Memahami dan menormalisasi pertanyaan..."})
     clean_message = rewrite_query(message, history)
 
+    if status_cb:
+        status_cb({"step": "intent", "label": "Menentukan sumber data yang relevan..."})
     intent = detect_intent(clean_message, history)
 
+    _intent_labels = {
+        "rag": "Mode: RAG Dokumen",
+        "sql": "Mode: SQL Database",
+        "graph": "Mode: Knowledge Graph",
+        "hybrid": "Mode: Hybrid",
+        "general": "Mode: General",
+    }
+    if status_cb:
+        status_cb({"step": "intent_result", "label": _intent_labels.get(intent, f"Mode: {intent}")})
+
     if intent == "rag":
-        result = handle_rag(clean_message, filters)
+        result = handle_rag(clean_message, filters, status_cb=status_cb)
     elif intent == "sql":
-        result = handle_sql(clean_message, history)
+        result = handle_sql(clean_message, history, status_cb=status_cb)
     elif intent == "graph":
-        result = handle_graph(clean_message)
+        result = handle_graph(clean_message, status_cb=status_cb)
     elif intent == "hybrid":
-        result = handle_hybrid(clean_message, history)
+        result = handle_hybrid(clean_message, history, status_cb=status_cb)
     else:
         result = handle_general(clean_message, history)
 
