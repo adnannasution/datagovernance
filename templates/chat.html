@@ -75,43 +75,60 @@
 
 {% block scripts %}
 <style>
+/* Status bubble */
 .status-bubble {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 14px;
-  background: var(--bg2, #f0f2f5);
-  border-radius: 12px 12px 12px 2px;
-  max-width: 80%;
-  margin-bottom: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin: 4px 0;
+  max-width: 420px;
 }
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--accent, #0066cc);
-  animation: pulse 1.2s ease-in-out infinite;
+  background: #6366f1;
   flex-shrink: 0;
+  animation: pulse-dot 1.2s ease-in-out infinite;
 }
-@keyframes pulse {
+@keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 0.4; transform: scale(0.75); }
 }
 .status-label {
-  font-size: 0.875rem;
-  color: var(--text2, #555);
+  font-size: 12.5px;
+  color: #475569;
+  font-style: italic;
+}
+.status-step-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6366f1;
+  background: #eef2ff;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
 }
 </style>
+
 <script>
 let history = [];
 let isLoading = false;
 const SESSION_ID = crypto.randomUUID();
 
+const STEP_ICONS = {
+  rewrite: '✏️', intent: '🧭', intent_result: '🎯',
+  embed: '🔢', search: '🔍', generate: '✍️',
+  gen_sql: '🛠️', exec_sql: '⚡', retry_sql: '🔄', format_sql: '📊',
+  graph_tag: '🔗', gen_cypher: '🛠️', exec_cypher: '⚡', retry_cypher: '🔄',
+  format_graph: '📊', synthesize: '🧩'
+};
+
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
 function autoResize(el) {
@@ -121,30 +138,31 @@ function autoResize(el) {
 
 function setSuggestion(text) {
   const input = document.getElementById('chat-input');
-  input.value = text;
-  autoResize(input);
-  input.focus();
+  input.value = text; autoResize(input); input.focus();
 }
 
-// ── Status bubble helpers ──────────────────────────────────────────────────
-
-function showStatusBubble(initialText) {
+// ─── Status bubble helpers ───────────────────────────────────────────────────
+function showStatusBubble(label, step) {
   const container = document.getElementById('chat-messages');
   const id = 'status-' + Date.now();
-  const wrap = document.createElement('div');
-  wrap.className = 'chat-bubble bubble-assistant';
-  wrap.id = id;
-  wrap.innerHTML = `<div class="status-bubble"><div class="status-dot"></div><span class="status-label">${escapeHtml(initialText)}</span></div>`;
-  container.appendChild(wrap);
+  const div = document.createElement('div');
+  div.id = id;
+  div.className = 'chat-bubble bubble-assistant';
+  div.innerHTML = `<div class="status-bubble">
+    <div class="status-dot"></div>
+    <span class="status-label" id="${id}-label">${escapeHtml(label)}</span>
+  </div>`;
+  container.appendChild(div);
   scrollToBottom();
   return id;
 }
 
-function updateStatusBubble(id, label) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const span = el.querySelector('.status-label');
-  if (span) span.textContent = label;
+function updateStatusBubble(id, label, step) {
+  const el = document.getElementById(id + '-label');
+  if (el) {
+    const icon = STEP_ICONS[step] || '';
+    el.textContent = (icon ? icon + ' ' : '') + label;
+  }
   scrollToBottom();
 }
 
@@ -153,8 +171,7 @@ function removeStatusBubble(id) {
   if (el) el.remove();
 }
 
-// ── Main send ──────────────────────────────────────────────────────────────
-
+// ─── Send message (SSE streaming) ───────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -165,7 +182,6 @@ async function sendMessage() {
   input.style.height = 'auto';
   document.getElementById('send-btn').disabled = true;
 
-  // Tambah bubble user
   appendBubble('user', message);
 
   const filters = {
@@ -173,9 +189,7 @@ async function sendMessage() {
     tag_number: document.getElementById('f-tag').value.trim() || null
   };
 
-  // Show initial status bubble
-  const statusId = showStatusBubble("Memproses...");
-
+  const statusId = showStatusBubble('Memproses pertanyaan...');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 135000);
 
@@ -183,9 +197,11 @@ async function sendMessage() {
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message, history, session_id: SESSION_ID, filters: filters || {}}),
+      body: JSON.stringify({message, history, filters, session_id: SESSION_ID}),
       signal: controller.signal
     });
+
+    if (!response.ok) throw new Error('Server error ' + response.status);
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -196,34 +212,29 @@ async function sendMessage() {
       if (done) break;
       buffer += decoder.decode(value, {stream: true});
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep incomplete line
+      buffer = lines.pop();
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         let data;
-        try {
-          data = JSON.parse(line.slice(6));
-        } catch(e) {
-          continue;
-        }
+        try { data = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (data.type === 'status') {
-          updateStatusBubble(statusId, data.label);
+          updateStatusBubble(statusId, data.label, data.step);
         } else if (data.type === 'result') {
           removeStatusBubble(statusId);
           appendAssistantBubble(data);
-          // Update history
           history.push({role: 'user', content: message});
           history.push({role: 'assistant', content: data.answer || ''});
           if (history.length > 20) history = history.slice(-20);
           showIntent(data.intent);
         } else if (data.type === 'error') {
           removeStatusBubble(statusId);
-          appendBubble('assistant', data.message || 'Terjadi kesalahan.');
+          appendBubble('assistant', 'Error: ' + (data.message || 'Terjadi kesalahan.'));
         }
       }
     }
-  } catch(err) {
+  } catch (err) {
     removeStatusBubble(statusId);
     const msg = err.name === 'AbortError'
       ? 'Permintaan timeout — server terlalu lama merespons. Coba lagi atau sederhanakan pertanyaan.'
@@ -253,7 +264,6 @@ function appendAssistantBubble(data) {
 
   let html = `<div class="bubble-content">${formatAnswer(data.answer)}</div>`;
 
-  // Rewritten query (tampilkan jika berbeda dari aslinya)
   if (data.rewritten && data.rewritten !== data.message) {
     html += `<div class="bubble-rewritten">
       <span class="rewritten-label">🔄 Dipahami sebagai:</span>
@@ -261,7 +271,6 @@ function appendAssistantBubble(data) {
     </div>`;
   }
 
-  // Sources (RAG)
   if (data.sources && data.sources.length > 0) {
     html += `<div class="bubble-sources">
       <div class="sources-title">📄 Sumber Dokumen</div>
@@ -276,7 +285,6 @@ function appendAssistantBubble(data) {
     </div>`;
   }
 
-  // SQL
   if (data.sql) {
     html += `<details class="bubble-sql">
       <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
@@ -284,7 +292,6 @@ function appendAssistantBubble(data) {
     </details>`;
   }
 
-  // Cypher
   if (data.cypher) {
     html += `<details class="bubble-sql">
       <summary>🔗 Cypher Query</summary>
@@ -299,16 +306,10 @@ function appendAssistantBubble(data) {
 
 function showIntent(intent) {
   const badge = document.getElementById('intent-indicator');
-  const labels = {
-    rag: '📄 RAG Dokumen',
-    sql: '🗄️ Query Database',
-    graph: '🔗 Knowledge Graph',
-    hybrid: '⚡ Hybrid',
-    general: '💬 General'
-  };
+  const labels = {rag:'📄 RAG Dokumen', sql:'🗄️ Query Database', graph:'🔗 Knowledge Graph', hybrid:'⚡ Hybrid', general:'💬 General'};
   badge.textContent = labels[intent] || intent;
   badge.className = `intent-badge intent-${intent}`;
-  setTimeout(() => badge.classList.add('hidden'), 4000);
+  setTimeout(() => badge.classList.add('hidden'), 5000);
 }
 
 function formatAnswer(text) {
@@ -320,11 +321,7 @@ function formatAnswer(text) {
 }
 
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function scrollToBottom() {
@@ -332,7 +329,6 @@ function scrollToBottom() {
   c.scrollTop = c.scrollHeight;
 }
 
-// Auto-focus
 document.getElementById('chat-input').focus();
 </script>
 {% endblock %}
