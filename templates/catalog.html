@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+
 <div class="filter-bar mb-lg">
   <a href="/catalog" class="btn {% if not active_domain %}btn-primary{% endif %}">Semua</a>
   {% for d in domain_list %}
@@ -7,30 +8,79 @@
   {% endfor %}
 </div>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
+<div class="catalog-grid">
   {% for t in stats %}
-  <a href="/catalog/{{ t.table }}" style="text-decoration:none">
-    <div class="card catalog-card" style="height:100%">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-        <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);letter-spacing:-0.01em">{{ t.label }}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px;font-family:monospace">{{ t.table }}</div>
+  {% set domain_lower = t.domain | lower %}
+  {% if domain_lower == 'sap' %}
+    {% set accent = '#f59e0b' %}{% set accent_bg = '#fffbeb' %}{% set icon_char = 'S' %}
+  {% elif domain_lower == 'master' %}
+    {% set accent = '#6366f1' %}{% set accent_bg = '#eef2ff' %}{% set icon_char = 'M' %}
+  {% elif domain_lower == 'monitoring' %}
+    {% set accent = '#10b981' %}{% set accent_bg = '#ecfdf5' %}{% set icon_char = 'Mo' %}
+  {% elif domain_lower == 'inspection' %}
+    {% set accent = '#3b82f6' %}{% set accent_bg = '#eff6ff' %}{% set icon_char = 'In' %}
+  {% elif domain_lower == 'readiness' %}
+    {% set accent = '#8b5cf6' %}{% set accent_bg = '#f5f3ff' %}{% set icon_char = 'R' %}
+  {% elif domain_lower == 'operasi' %}
+    {% set accent = '#ef4444' %}{% set accent_bg = '#fef2f2' %}{% set icon_char = 'Op' %}
+  {% else %}
+    {% set accent = '#64748b' %}{% set accent_bg = '#f8fafc' %}{% set icon_char = 'D' %}
+  {% endif %}
+
+  <a href="/catalog/{{ t.table }}" class="catalog-card-link">
+    <div class="catalog-card-v2 {% if not t.exists %}catalog-card-missing{% endif %}">
+
+      <!-- Top accent bar -->
+      <div class="cc-accent-bar" style="background: {{ accent }}"></div>
+
+      <div class="cc-body">
+        <!-- Header -->
+        <div class="cc-header">
+          <div class="cc-icon" style="background: {{ accent_bg }}; color: {{ accent }}">
+            {{ icon_char }}
+          </div>
+          <div class="cc-title-wrap">
+            <div class="cc-label">{{ t.label }}</div>
+            <div class="cc-table-name">{{ t.table }}</div>
+          </div>
+          <span class="cc-domain-badge" style="background: {{ accent_bg }}; color: {{ accent }}">{{ t.domain }}</span>
         </div>
-        <span class="badge badge-tipe">{{ t.domain }}</span>
+
+        <!-- Stats row -->
+        <div class="cc-stats">
+          <div class="cc-stat">
+            <div class="cc-stat-value">{{ "{:,}".format(t.total_rows) }}</div>
+            <div class="cc-stat-label">rows</div>
+          </div>
+          <div class="cc-stat-divider"></div>
+          <div class="cc-stat">
+            <div class="cc-stat-value">{{ t.total_cols }}</div>
+            <div class="cc-stat-label">kolom</div>
+          </div>
+          <div class="cc-stat-divider"></div>
+          <div class="cc-stat">
+            <div class="cc-stat-value" style="font-size:12px">{{ t.ukuran }}</div>
+            <div class="cc-stat-label">ukuran</div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="cc-footer">
+          {% if t.tag_col %}
+          <div class="cc-tag-col">
+            <svg viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            <code>{{ t.tag_col }}</code>
+          </div>
+          {% else %}
+          <div class="cc-tag-col cc-tag-none">—</div>
+          {% endif %}
+          {% if not t.exists %}
+          <span class="badge badge-error" style="font-size:10px">tabel tidak ditemukan</span>
+          {% else %}
+          <div class="cc-arrow">→</div>
+          {% endif %}
+        </div>
       </div>
-      <div style="display:flex;gap:16px;font-size:12px;color:var(--text2);margin-bottom:8px">
-        <div><span style="font-weight:700;color:var(--text);font-size:15px">{{ "{:,}".format(t.total_rows) }}</span> <span style="font-size:11px">rows</span></div>
-        <div><span style="font-weight:600;color:var(--text)">{{ t.total_cols }}</span> <span style="font-size:11px">kolom</span></div>
-        <div style="color:var(--text3);font-size:11px;margin-top:3px">{{ t.ukuran }}</div>
-      </div>
-      {% if t.tag_col %}
-      <div style="font-size:11px;color:var(--text3)">
-        Tag col: <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--primary);font-weight:500">{{ t.tag_col }}</code>
-      </div>
-      {% endif %}
-      {% if not t.exists %}
-      <div style="margin-top:8px"><span class="badge badge-error">tabel tidak ditemukan</span></div>
-      {% endif %}
     </div>
   </a>
   {% else %}
@@ -45,4 +95,175 @@
   </div>
   {% endfor %}
 </div>
+
+<style>
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.catalog-card-link {
+  text-decoration: none;
+  display: block;
+}
+
+.catalog-card-v2 {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  height: 100%;
+  transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
+  cursor: pointer;
+}
+.catalog-card-v2:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  transform: translateY(-3px);
+  border-color: #c7d2fe;
+}
+.catalog-card-missing {
+  opacity: 0.6;
+}
+
+.cc-accent-bar {
+  height: 4px;
+  width: 100%;
+}
+
+.cc-body {
+  padding: 14px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cc-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cc-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: -0.03em;
+}
+
+.cc-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.cc-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-table-name {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-family: monospace;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-domain-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cc-stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.cc-stat {
+  flex: 1;
+  text-align: center;
+}
+
+.cc-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.cc-stat-label {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.cc-stat-divider {
+  width: 1px;
+  height: 28px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
+
+.cc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 2px;
+}
+
+.cc-tag-col {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #64748b;
+}
+.cc-tag-col svg {
+  width: 12px; height: 12px;
+  stroke: #94a3b8; fill: none; stroke-width: 2;
+  flex-shrink: 0;
+}
+.cc-tag-col code {
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #3b82f6;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.cc-tag-none {
+  color: #cbd5e1;
+}
+
+.cc-arrow {
+  font-size: 14px;
+  color: #cbd5e1;
+  transition: color 0.15s, transform 0.15s;
+}
+.catalog-card-v2:hover .cc-arrow {
+  color: #6366f1;
+  transform: translateX(3px);
+}
+</style>
 {% endblock %}
