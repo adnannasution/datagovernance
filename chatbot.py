@@ -21,6 +21,30 @@ client = OpenAI(
 )
 MODEL = "gpt-4o"
 
+
+# ─── Streaming helper ─────────────────────────────────────────────────────────
+
+def _stream_generate(messages, max_tokens, status_cb):
+    """Stream completion, emit tokens via status_cb, return full text."""
+    stream = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        messages=messages,
+        stream=True
+    )
+    full_text = ""
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            full_text += delta
+            if status_cb:
+                try:
+                    status_cb({"type": "token", "text": delta})
+                except:
+                    pass
+    return full_text
+
+
 # ─── Categorical value cache ──────────────────────────────────────────────────
 
 # Kolom kategorikal yang nilainya sering disebut user dalam pertanyaan
@@ -1358,9 +1382,7 @@ def handle_rag(message: str, filters: dict = None, status_cb=None) -> dict:
     context = "\n\n---\n\n".join(context_parts)
 
     _emit("generate", "Merangkum jawaban dari dokumen...")
-    resp = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=800,
+    answer = _stream_generate(
         messages=[
             {
                 "role": "system",
@@ -1373,12 +1395,14 @@ Selalu sebutkan sumber dokumen di akhir jawaban."""
                 "role": "user",
                 "content": f"Konteks dokumen:\n{context}\n\nPertanyaan: {message}"
             }
-        ]
+        ],
+        max_tokens=800,
+        status_cb=status_cb
     )
 
     return {
         "type": "rag",
-        "answer": resp.choices[0].message.content,
+        "answer": answer,
         "sources": sources,
         "context_used": context[:500]
     }
@@ -1526,9 +1550,7 @@ def handle_sql(message: str, history: list = None, status_cb=None) -> dict:
 
     data_preview = json.dumps(data[:10], default=str, ensure_ascii=False)
     _emit("format_sql", "Memformat hasil data...")
-    fmt_resp = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=600,
+    fmt_answer = _stream_generate(
         messages=[
             {
                 "role": "system",
@@ -1541,12 +1563,14 @@ Sertakan insight singkat jika relevan."""
                 "role": "user",
                 "content": f"Pertanyaan: {message}\n\nHasil query ({len(data)} baris):\n{data_preview}"
             }
-        ]
+        ],
+        max_tokens=600,
+        status_cb=status_cb
     )
 
     return {
         "type": "sql",
-        "answer": fmt_resp.choices[0].message.content,
+        "answer": fmt_answer,
         "sql": sql,
         "data": data[:20],
         "total_rows": len(data),
@@ -1672,9 +1696,7 @@ def handle_graph(message: str, status_cb=None) -> dict:
                 if graph_ctx:
                     _emit("format_graph", "Merangkum data dari Knowledge Graph...")
                     ctx_text = _format_graph_context(tag, graph_ctx)
-                    fmt_resp = client.chat.completions.create(
-                        model=MODEL,
-                        max_tokens=800,
+                    graph_answer = _stream_generate(
                         messages=[
                             {
                                 "role": "system",
@@ -1687,11 +1709,13 @@ Jawab secara terstruktur dan informatif."""
                                 "role": "user",
                                 "content": f"Pertanyaan: {message}\n\n{ctx_text}"
                             }
-                        ]
+                        ],
+                        max_tokens=800,
+                        status_cb=status_cb
                     )
                     return {
                         "type": "graph",
-                        "answer": fmt_resp.choices[0].message.content,
+                        "answer": graph_answer,
                         "cypher": f"GraphRAG lookup for tag: {tag}",
                         "data": [],
                         "tag": tag
@@ -1764,9 +1788,7 @@ Jawab secara terstruktur dan informatif."""
 
         data_text = json.dumps(data[:10], default=str, ensure_ascii=False)
         _emit("format_graph", "Memformat hasil dari Knowledge Graph...")
-        fmt_resp = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=500,
+        graph_answer = _stream_generate(
             messages=[
                 {
                     "role": "system",
@@ -1776,12 +1798,14 @@ Jawab secara terstruktur dan informatif."""
                     "role": "user",
                     "content": f"Pertanyaan: {message}\n\nHasil ({len(data)} records):\n{data_text}"
                 }
-            ]
+            ],
+            max_tokens=500,
+            status_cb=status_cb
         )
 
         return {
             "type": "graph",
-            "answer": fmt_resp.choices[0].message.content,
+            "answer": graph_answer,
             "cypher": cypher,
             "data": data[:10]
         }
@@ -1844,9 +1868,7 @@ def handle_hybrid(message: str, history: list = None, status_cb=None) -> dict:
         try: status_cb({"step": "synthesize", "label": "Menyintesis jawaban dari semua sumber..."})
         except: pass
     try:
-        synth = client.chat.completions.create(
-            model=MODEL,
-            max_tokens=800,
+        answer = _stream_generate(
             messages=[
                 {
                     "role": "system",
@@ -1858,9 +1880,10 @@ Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
                     "role": "user",
                     "content": f"Pertanyaan: {message}\n\nInformasi yang tersedia:\n{combined_context}"
                 }
-            ]
+            ],
+            max_tokens=800,
+            status_cb=status_cb
         )
-        answer = synth.choices[0].message.content
     except Exception as e:
         import traceback, logging
         logging.error(f"[HYBRID SYNTHESIS ERROR] {e}\n{traceback.format_exc()}")
@@ -1878,7 +1901,7 @@ Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
 
 # ─── General Handler ──────────────────────────────────────────────────────────
 
-def handle_general(message: str, history: list = None) -> dict:
+def handle_general(message: str, history: list = None, status_cb=None) -> dict:
     messages = [
         {
             "role": "system",
@@ -1907,12 +1930,10 @@ Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel at
         messages.extend(history[-6:])
     messages.append({"role": "user", "content": message})
 
-    resp = client.chat.completions.create(
-        model=MODEL, max_tokens=400, messages=messages
-    )
+    answer = _stream_generate(messages=messages, max_tokens=400, status_cb=status_cb)
     return {
         "type": "general",
-        "answer": resp.choices[0].message.content
+        "answer": answer
     }
 
 # ─── Main Chat Function ───────────────────────────────────────────────────────
@@ -1963,7 +1984,7 @@ def chat(message: str, history: list = None, filters: dict = None,
     elif intent == "hybrid":
         result = handle_hybrid(clean_message, history, status_cb=status_cb)
     else:
-        result = handle_general(clean_message, history)
+        result = handle_general(clean_message, history, status_cb=status_cb)
 
     # Simpan ke session memory
     if session_id:

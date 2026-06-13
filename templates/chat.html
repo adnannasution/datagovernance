@@ -81,6 +81,8 @@
 <script>
 let history = [];
 let isLoading = false;
+let streamBubbleEl = null;
+let streamContentEl = null;
 const SESSION_ID = crypto.randomUUID();
 
 const STEP_ICONS = {
@@ -135,6 +137,66 @@ function removeStatusBubble(id) {
   if (el) el.remove();
 }
 
+function startStreamBubble(statusId) {
+  removeStatusBubble(statusId);
+  const container = document.getElementById('chat-messages');
+  streamBubbleEl = document.createElement('div');
+  streamBubbleEl.className = 'chat-bubble bubble-assistant';
+  streamContentEl = document.createElement('div');
+  streamContentEl.className = 'bubble-content';
+  streamBubbleEl.appendChild(streamContentEl);
+  container.appendChild(streamBubbleEl);
+  scrollToBottom();
+}
+
+function appendToken(text) {
+  if (!streamContentEl) return;
+  const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  streamContentEl.innerHTML += escaped.replace(/\n/g, '<br>');
+  scrollToBottom();
+}
+
+function appendBubbleMetadata(div, data) {
+  let html = '';
+
+  if (data.rewritten && data.rewritten !== data.message) {
+    html += `<div class="bubble-rewritten">
+      <span class="rewritten-label">🔄 Dipahami sebagai:</span>
+      <span class="rewritten-text">${escapeHtml(data.rewritten)}</span>
+    </div>`;
+  }
+
+  if (data.sources && data.sources.length > 0) {
+    html += `<div class="bubble-sources">
+      <div class="sources-title">📄 Sumber Dokumen</div>
+      ${data.sources.map(s => `
+        <a href="/document/${s.doc_id}" class="source-item" target="_blank">
+          <span class="source-name">${escapeHtml(s.judul)}</span>
+          ${s.ru ? `<span class="source-badge">${s.ru}</span>` : ''}
+          ${s.halaman ? `<span class="source-badge">Hal. ${s.halaman}</span>` : ''}
+          <span class="source-score">${Math.round(s.score*100)}%</span>
+        </a>
+      `).join('')}
+    </div>`;
+  }
+
+  if (data.sql) {
+    html += `<details class="bubble-sql">
+      <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
+      <pre class="sql-code">${escapeHtml(data.sql)}</pre>
+    </details>`;
+  }
+
+  if (data.cypher) {
+    html += `<details class="bubble-sql">
+      <summary>🔗 Cypher Query</summary>
+      <pre class="sql-code">${escapeHtml(data.cypher)}</pre>
+    </details>`;
+  }
+
+  if (html) div.innerHTML += html;
+}
+
 // ─── Send message (SSE streaming) ───────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('chat-input');
@@ -182,9 +244,17 @@ async function sendMessage() {
 
         if (data.type === 'status') {
           updateStatusBubble(statusId, data.label, data.step);
+        } else if (data.type === 'token') {
+          if (!streamContentEl) startStreamBubble(statusId);
+          appendToken(data.text);
         } else if (data.type === 'result') {
           removeStatusBubble(statusId);
-          appendAssistantBubble(data);
+          if (streamBubbleEl) {
+            appendBubbleMetadata(streamBubbleEl, data);
+            streamBubbleEl = null; streamContentEl = null;
+          } else {
+            appendAssistantBubble(data);
+          }
           history.push({role: 'user', content: message});
           history.push({role: 'assistant', content: data.answer || ''});
           if (history.length > 20) history = history.slice(-20);
