@@ -47,12 +47,12 @@
 
   /* Sidebar */
   --sidebar-w:    230px;
-  --sidebar-bg:   #0c1422;
-  --sidebar-bg2:  #111b2e;
-  --sidebar-text: #94a3b8;
-  --sidebar-text-active: #ffffff;
-  --sidebar-hover: rgba(255,255,255,0.06);
-  --sidebar-active-bg: rgba(59,130,246,0.18);
+  --sidebar-bg:   #ffffff;
+  --sidebar-bg2:  #f8fafc;
+  --sidebar-text: #64748b;
+  --sidebar-text-active: #1e293b;
+  --sidebar-hover: #f1f5f9;
+  --sidebar-active-bg: #eff6ff;
   --sidebar-active-border: #3b82f6;
 
   /* Shape */
@@ -91,7 +91,7 @@ body {
 ═══════════════════════════════════════════ */
 .sidebar {
   width: var(--sidebar-w);
-  background: #0c1422;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -100,7 +100,8 @@ body {
   z-index: 100;
   overflow-y: auto;
   overflow-x: hidden;
-  box-shadow: 2px 0 20px rgba(0,0,0,0.15);
+  border-right: 1px solid #e5e7eb;
+  box-shadow: 1px 0 8px rgba(0,0,0,0.04);
 }
 
 .sidebar-brand {
@@ -108,9 +109,9 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
-  background: #0c1422;
+  background: #ffffff;
 }
 .brand-icon-wrap {
   width: 32px;
@@ -130,7 +131,7 @@ body {
 .brand-text {
   font-size: 13.5px;
   font-weight: 700;
-  color: #ffffff;
+  color: #1e293b;
   letter-spacing: -0.01em;
   line-height: 1.2;
 }
@@ -144,11 +145,11 @@ body {
 }
 
 .nav-group-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .08em;
-  color: rgba(255,255,255,0.3);
+  color: #94a3b8;
   padding: 8px 10px 4px;
   margin-top: 6px;
 }
@@ -159,7 +160,7 @@ body {
   gap: 9px;
   padding: 7px 10px;
   border-radius: 8px;
-  color: #94a3b8;
+  color: #475569;
   text-decoration: none;
   font-size: 13px;
   font-weight: 400;
@@ -169,33 +170,32 @@ body {
 }
 .nav-item svg {
   width: 16px; height: 16px;
-  stroke: #64748b; fill: none; stroke-width: 2;
+  stroke: #94a3b8; fill: none; stroke-width: 2;
   flex-shrink: 0;
-  opacity: 0.55;
   transition: opacity 0.15s, stroke 0.15s;
 }
 .nav-item:hover {
-  background: rgba(255,255,255,0.06);
-  color: #e2e8f0;
+  background: #f1f5f9;
+  color: #1e293b;
 }
-.nav-item:hover svg { stroke: #93c5fd; opacity: 1; }
+.nav-item:hover svg { stroke: #6366f1; }
 .nav-item.active {
-  background: rgba(59,130,246,0.18);
-  color: #ffffff;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-weight: 600;
   border-left-color: #3b82f6;
 }
-.nav-item.active svg { stroke: #60a5fa; opacity: 1; }
+.nav-item.active svg { stroke: #3b82f6; }
 
-/* Governance section icon colors */
-.nav-item.gov-item svg { stroke: #818cf8; }
-.nav-item.gov-item:hover svg,
-.nav-item.gov-item.active svg { stroke: #93c5fd; }
+/* Governance section */
+.nav-item.gov-item svg { stroke: #a5b4fc; }
+.nav-item.gov-item:hover svg { stroke: #6366f1; }
+.nav-item.gov-item.active svg { stroke: #3b82f6; }
 
-/* Dokumen section icon colors */
-.nav-item.doc-item svg { stroke: #64748b; }
-.nav-item.doc-item:hover svg,
-.nav-item.doc-item.active svg { stroke: #60a5fa; }
+/* Dokumen section */
+.nav-item.doc-item svg { stroke: #94a3b8; }
+.nav-item.doc-item:hover svg { stroke: #6366f1; }
+.nav-item.doc-item.active svg { stroke: #3b82f6; }
 
 /* ─── Sidebar close button (mobile) ─── */
 .sidebar-close-btn {
@@ -206,10 +206,10 @@ body {
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
-  color: rgba(255,255,255,0.5);
+  color: #94a3b8;
   transition: color 0.15s, background 0.15s;
 }
-.sidebar-close-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.sidebar-close-btn:hover { color: #1e293b; background: #f1f5f9; }
 .sidebar-close-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; display: block; }
 
 /* ─── Sidebar overlay (mobile) ─── */
@@ -237,7 +237,7 @@ body {
 .sidebar.collapsed .nav-item { justify-content: center; padding: 8px; border-left-color: transparent !important; }
 .sidebar.collapsed .nav-item svg { margin: 0; opacity: 0.7; }
 .sidebar.collapsed .nav-item.active svg { opacity: 1; }
-.sidebar.collapsed .nav-item:hover { background: rgba(255,255,255,0.1); }
+.sidebar.collapsed .nav-item:hover { background: #f1f5f9; }
 .sidebar.collapsed .sidebar-nav { padding: 0.5rem 0.25rem; gap: 2px; }
 
 /* Transition for collapse animation */
