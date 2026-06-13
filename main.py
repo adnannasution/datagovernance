@@ -452,6 +452,17 @@ async def api_equipment_search(q: str = "", plant: str = ""):
 async def api_equipment_360(tag: str):
     return get_equipment_360(tag)
 
+@app.get("/api/tag/{tag}/resolve")
+async def api_tag_resolve(tag: str):
+    from db_equipment import resolve_tag_variants
+    canonical = tag.upper()
+    variants = resolve_tag_variants(canonical)
+    return {"canonical": canonical, "variants": variants, "total_variants": len(variants)}
+
+@app.get("/api/tag/{tag}/summary")
+async def api_tag_summary(tag: str):
+    return get_equipment_360(tag.upper())
+
 @app.get("/api/catalog/stats")
 async def api_catalog_stats():
     return get_catalog_stats()
