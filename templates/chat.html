@@ -1,58 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="chat-layout">
+<div class="chat-layout-centered">
 
-  <!-- Sidebar kiri: filter + suggestions -->
-  <div class="chat-sidebar">
-    <div class="card mb-lg">
-      <div class="card-title">Filter Konteks</div>
-      <div class="form-group">
-        <label>Refinery Unit</label>
-        <select id="f-ru">
-          <option value="">Semua RU</option>
-          <option>RU II Dumai</option>
-          <option>RU III Plaju</option>
-          <option>RU IV Cilacap</option>
-          <option>RU V Balikpapan</option>
-          <option>RU VI Balongan</option>
-          <option>RU VII Kasim</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Tag Number</label>
-        <input type="text" id="f-tag" placeholder="contoh: 4B-P-001"/>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Contoh Pertanyaan</div>
-      <div class="suggestions">
-        <div class="sug-group-label">📄 Dokumen</div>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Apa prosedur overhaul pompa sentrifugal?</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">SOP penanganan vibrasi tinggi</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Batas alarm temperatur kompresor</button>
-
-        <div class="sug-group-label" style="margin-top:10px">📊 Data</div>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Berapa notifikasi overdue di RU IV?</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Equipment apa yang masuk bad actor aktif?</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">List zero clamp yang masih aktif</button>
-
-        <div class="sug-group-label" style="margin-top:10px">🔍 Analisa</div>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Equipment mana yang paling banyak WO overdue?</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Ringkasan kondisi ICU critical bulan ini</button>
-        <button class="sug-btn" onclick="setSuggestion(this.textContent)">Dokumen apa yang terkait tag 4B-P-001?</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Area chat utama -->
   <div class="chat-main">
     <div class="chat-messages" id="chat-messages">
-      <!-- Welcome message -->
       <div class="chat-welcome">
         <div class="welcome-icon">🤖</div>
         <div class="welcome-title">AI Assistant Pertamina</div>
-        <div class="welcome-desc">Saya bisa menjawab pertanyaan tentang dokumen, data equipment, monitoring, dan analisa kondisi aset. Tanya apa saja!</div>
+        <div class="welcome-desc">Tanya tentang dokumen, data equipment, monitoring, atau analisa kondisi aset.</div>
+        <div class="welcome-chips">
+          <button class="wchip" onclick="setSuggestion(this.textContent)">Berapa equipment bad actor aktif?</button>
+          <button class="wchip" onclick="setSuggestion(this.textContent)">Equipment mana yang paling banyak WO overdue?</button>
+          <button class="wchip" onclick="setSuggestion(this.textContent)">List zero clamp yang masih terpasang</button>
+          <button class="wchip" onclick="setSuggestion(this.textContent)">Ringkasan kondisi ICU critical bulan ini</button>
+          <button class="wchip" onclick="setSuggestion(this.textContent)">SOP penanganan vibrasi tinggi</button>
+          <button class="wchip" onclick="setSuggestion(this.textContent)">Prosedur overhaul pompa sentrifugal</button>
+        </div>
       </div>
     </div>
 
@@ -70,6 +33,7 @@
       </div>
     </div>
   </div>
+
 </div>
 {% endblock %}
 
@@ -184,10 +148,7 @@ async function sendMessage() {
 
   appendBubble('user', message);
 
-  const filters = {
-    ru: document.getElementById('f-ru').value || null,
-    tag_number: document.getElementById('f-tag').value.trim() || null
-  };
+  const filters = {};
 
   const statusId = showStatusBubble('Memproses pertanyaan...');
   const controller = new AbortController();
