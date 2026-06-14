@@ -217,7 +217,8 @@ def _build_neo4j_categorical_values() -> dict:
                 try:
                     rows = session.run(
                         f"MATCH (n:{label}) WHERE n.{prop} IS NOT NULL "
-                        f"RETURN DISTINCT n.{prop} AS val ORDER BY val LIMIT 30"
+                        f"RETURN DISTINCT n.{prop} AS val ORDER BY val LIMIT 30",
+                        timeout=8
                     ).data()
                     vals = [r["val"] for r in rows if r["val"]]
                     if vals:
@@ -1748,7 +1749,7 @@ Jawab secara terstruktur dan informatif."""
             try:
                 with get_driver() as driver:
                     with driver.session() as session:
-                        data = [dict(r) for r in session.run(cypher)]
+                        data = [dict(r) for r in session.run(cypher, timeout=20)]
                 last_error = None
                 break
             except Exception as e:
