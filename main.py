@@ -747,7 +747,7 @@ async def api_chat_stream(request: Request):
                 item = await asyncio.wait_for(queue.get(), timeout=135)
                 if item is None:
                     break
-                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n"
         except asyncio.TimeoutError:
             yield f"data: {json.dumps({'type': 'error', 'message': 'timeout'}, ensure_ascii=False)}\n\n"
 
