@@ -22,27 +22,14 @@ client = OpenAI(
 MODEL = "gpt-4o"
 
 
-# ─── Streaming helper ─────────────────────────────────────────────────────────
-
-def _stream_generate(messages, max_tokens, status_cb):
-    """Stream completion, emit tokens via status_cb, return full text."""
-    stream = client.chat.completions.create(
+def _generate(messages, max_tokens):
+    """Regular (non-streaming) completion, returns full text."""
+    resp = client.chat.completions.create(
         model=MODEL,
         max_tokens=max_tokens,
         messages=messages,
-        stream=True
     )
-    full_text = ""
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            full_text += delta
-            if status_cb:
-                try:
-                    status_cb({"type": "token", "text": delta})
-                except:
-                    pass
-    return full_text
+    return resp.choices[0].message.content
 
 
 # ─── Categorical value cache ──────────────────────────────────────────────────
@@ -1383,7 +1370,7 @@ def handle_rag(message: str, filters: dict = None, status_cb=None) -> dict:
     context = "\n\n---\n\n".join(context_parts)
 
     _emit("generate", "Merangkum jawaban dari dokumen...")
-    answer = _stream_generate(
+    answer = _generate(
         messages=[
             {
                 "role": "system",
@@ -1551,7 +1538,7 @@ def handle_sql(message: str, history: list = None, status_cb=None) -> dict:
 
     data_preview = json.dumps(data[:10], default=str, ensure_ascii=False)
     _emit("format_sql", "Memformat hasil data...")
-    fmt_answer = _stream_generate(
+    fmt_answer = _generate(
         messages=[
             {
                 "role": "system",
@@ -1697,7 +1684,7 @@ def handle_graph(message: str, status_cb=None) -> dict:
                 if graph_ctx:
                     _emit("format_graph", "Merangkum data dari Knowledge Graph...")
                     ctx_text = _format_graph_context(tag, graph_ctx)
-                    graph_answer = _stream_generate(
+                    graph_answer = _generate(
                         messages=[
                             {
                                 "role": "system",
@@ -1789,7 +1776,7 @@ Jawab secara terstruktur dan informatif."""
 
         data_text = json.dumps(data[:10], default=str, ensure_ascii=False)
         _emit("format_graph", "Memformat hasil dari Knowledge Graph...")
-        graph_answer = _stream_generate(
+        graph_answer = _generate(
             messages=[
                 {
                     "role": "system",
@@ -1869,7 +1856,7 @@ def handle_hybrid(message: str, history: list = None, status_cb=None) -> dict:
         try: status_cb({"step": "synthesize", "label": "Menyintesis jawaban dari semua sumber..."})
         except: pass
     try:
-        answer = _stream_generate(
+        answer = _generate(
             messages=[
                 {
                     "role": "system",
@@ -1931,7 +1918,7 @@ Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel at
         messages.extend(history[-6:])
     messages.append({"role": "user", "content": message})
 
-    answer = _stream_generate(messages=messages, max_tokens=400, status_cb=status_cb)
+    answer = _generate(messages=messages, max_tokens=400)
     return {
         "type": "general",
         "answer": answer
