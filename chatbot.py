@@ -1981,7 +1981,17 @@ def chat(message: str, history: list = None, filters: dict = None,
     elif intent == "sql":
         result = handle_sql(clean_message, history, status_cb=status_cb)
     elif intent == "graph":
-        result = handle_graph(clean_message, status_cb=status_cb)
+        try:
+            result = handle_graph(clean_message, status_cb=status_cb)
+            # If graph returned empty/error, fallback to SQL
+            if result.get("error") or not result.get("answer"):
+                raise ValueError("graph empty")
+        except Exception as e:
+            logging.warning(f"[GRAPH FALLBACK] {e} — retrying as SQL")
+            if status_cb:
+                try: status_cb({"step": "gen_sql", "label": "Knowledge Graph tidak tersedia, beralih ke database..."})
+                except: pass
+            result = handle_sql(clean_message, history, status_cb=status_cb)
     elif intent == "hybrid":
         result = handle_hybrid(clean_message, history, status_cb=status_cb)
     else:
