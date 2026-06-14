@@ -50,6 +50,10 @@ CATEGORICAL_COLUMNS = [
     ("sap_work_orders",             "system_status"),
     ("sap_work_orders",             "order_type"),
     ("sap_work_orders",             "maint_act_type"),
+    ("sap_bom",                     "bom_category"),
+    ("sap_bom",                     "material_type"),
+    ("sap_bom",                     "criticality"),
+    ("sap_bom",                     "spare_part_id"),
     ("pipeline_inspection",         "fluida_service"),
     ("zero_clamp",                  "type_damage"),
     ("zero_clamp",                  "type_perbaikan"),
@@ -250,6 +254,7 @@ metering_monitoring    → tag_number
 boc                    → equipment
 sap_notifications      → equipment
 sap_work_orders        → equipment
+sap_bom                → equipment
 pipeline_inspection    → tag_number
 zero_clamp             → tag_no_ln
 inspection_plan        → tag_no_ln
@@ -302,6 +307,13 @@ sap_work_orders
          planner_group, main_workctr, maint_act_type,
          total_plan_cost, total_act_cost, priority,
          notification, po_number, plant
+
+sap_bom
+  Kolom: equipment (tag number peralatan), equipment_desc, component (nomor material komponen),
+         component_desc, quantity, component_unit, criticality,
+         material_type, spare_part_id, bom_category, valid_from, valid_to,
+         mfr_part_number, old_matl_number, item_category, assembly,
+         plant, usage, upload_batch, uploaded_at
 
 === TABEL MONITORING ===
 

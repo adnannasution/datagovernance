@@ -85,3 +85,41 @@ CREATE INDEX IF NOT EXISTS idx_doc_table_rows_doc_id ON doc_table_rows(doc_id);
 CREATE INDEX IF NOT EXISTS idx_doc_table_rows_tag ON doc_table_rows(tag_number);
 CREATE INDEX IF NOT EXISTS idx_doc_tag_links_doc_id ON doc_tag_links(doc_id);
 CREATE INDEX IF NOT EXISTS idx_doc_tag_links_tag ON doc_tag_links(tag_number);
+
+
+-- ─── SAP BOM (Bill of Materials) ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sap_bom (
+    id               SERIAL PRIMARY KEY,
+    equipment        VARCHAR(50),
+    equipment_desc   TEXT,
+    material         VARCHAR(30),
+    plant            VARCHAR(10),
+    usage            VARCHAR(5),
+    item_node        VARCHAR(10),
+    bom_category     VARCHAR(5),
+    equip_category   VARCHAR(5),
+    criticality      VARCHAR(5),
+    alternative      VARCHAR(5),
+    component        VARCHAR(30),
+    component_desc   TEXT,
+    mfr_part_number  VARCHAR(100),
+    old_matl_number  VARCHAR(50),
+    material_type    VARCHAR(10),
+    item             VARCHAR(10),
+    item_category    VARCHAR(5),
+    quantity         NUMERIC(18,3),
+    component_unit   VARCHAR(10),
+    assembly         VARCHAR(50),
+    sort_string      VARCHAR(50),
+    spare_part_id    VARCHAR(10),
+    item_text        TEXT,
+    cost_element     VARCHAR(20),
+    purch_group      VARCHAR(10),
+    valid_from       DATE,
+    valid_to         DATE,
+    upload_batch     VARCHAR(50),
+    uploaded_at      TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sap_bom_equipment ON sap_bom(equipment);
+CREATE INDEX IF NOT EXISTS idx_sap_bom_component ON sap_bom(component);
+CREATE INDEX IF NOT EXISTS idx_sap_bom_batch ON sap_bom(upload_batch);

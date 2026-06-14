@@ -24,6 +24,7 @@ TABLE_CATALOG = [
     # SAP
     {"table": "sap_notifications",       "domain": "SAP",         "tag_col": "equipment",        "label": "SAP Notifications"},
     {"table": "sap_work_orders",         "domain": "SAP",         "tag_col": "equipment",        "label": "SAP Work Orders"},
+    {"table": "sap_bom",                 "domain": "SAP",         "tag_col": "equipment",        "label": "SAP BOM (Bill of Materials)"},
     # Monitoring
     {"table": "bad_actor_monitoring",    "domain": "Monitoring",  "tag_col": "tag_number",       "label": "Bad Actor"},
     {"table": "icu_monitoring",          "domain": "Monitoring",  "tag_col": "tag_no",           "label": "ICU Monitoring"},
