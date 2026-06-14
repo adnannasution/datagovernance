@@ -39,6 +39,23 @@
 
 {% block scripts %}
 <style>
+/* Streaming cursor */
+.stream-cursor {
+  display: inline-block;
+  color: #6366f1;
+  animation: blink-cursor 0.8s step-end infinite;
+  font-size: 14px;
+  margin-left: 1px;
+  vertical-align: middle;
+}
+@keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* Assistant message open layout */
+.bubble-assistant { padding: 2px 0 8px; }
+.bubble-assistant .bubble-sources,
+.bubble-assistant .bubble-sql,
+.bubble-assistant .bubble-rewritten { margin-top: 10px; }
+
 /* Status bubble */
 .status-bubble {
   display: flex;
@@ -83,6 +100,7 @@ let history = [];
 let isLoading = false;
 let streamBubbleEl = null;
 let streamContentEl = null;
+let streamAccumText = '';
 const SESSION_ID = crypto.randomUUID();
 
 const STEP_ICONS = {
@@ -139,6 +157,7 @@ function removeStatusBubble(id) {
 
 function startStreamBubble(statusId) {
   removeStatusBubble(statusId);
+  streamAccumText = '';
   const container = document.getElementById('chat-messages');
   streamBubbleEl = document.createElement('div');
   streamBubbleEl.className = 'chat-bubble bubble-assistant';
@@ -151,8 +170,8 @@ function startStreamBubble(statusId) {
 
 function appendToken(text) {
   if (!streamContentEl) return;
-  const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  streamContentEl.innerHTML += escaped.replace(/\n/g, '<br>');
+  streamAccumText += text;
+  streamContentEl.innerHTML = formatAnswer(streamAccumText) + '<span class="stream-cursor">▍</span>';
   scrollToBottom();
 }
 
@@ -250,8 +269,10 @@ async function sendMessage() {
         } else if (data.type === 'result') {
           removeStatusBubble(statusId);
           if (streamBubbleEl) {
+            // remove cursor, re-render final markdown
+            streamContentEl.innerHTML = formatAnswer(streamAccumText);
             appendBubbleMetadata(streamBubbleEl, data);
-            streamBubbleEl = null; streamContentEl = null;
+            streamBubbleEl = null; streamContentEl = null; streamAccumText = '';
           } else {
             appendAssistantBubble(data);
           }
