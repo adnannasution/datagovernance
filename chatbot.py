@@ -1385,7 +1385,6 @@ Selalu sebutkan sumber dokumen di akhir jawaban."""
             }
         ],
         max_tokens=800,
-        status_cb=status_cb
     )
 
     return {
@@ -1553,7 +1552,6 @@ Sertakan insight singkat jika relevan."""
             }
         ],
         max_tokens=600,
-        status_cb=status_cb
     )
 
     return {
@@ -1699,7 +1697,6 @@ Jawab secara terstruktur dan informatif."""
                             }
                         ],
                         max_tokens=800,
-                        status_cb=status_cb
                     )
                     return {
                         "type": "graph",
@@ -1788,7 +1785,6 @@ Jawab secara terstruktur dan informatif."""
                 }
             ],
             max_tokens=500,
-            status_cb=status_cb
         )
 
         return {
@@ -1870,7 +1866,6 @@ Jawab dalam Bahasa Indonesia. Berikan insight yang berguna."""
                 }
             ],
             max_tokens=800,
-            status_cb=status_cb
         )
     except Exception as e:
         import traceback, logging
