@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
@@ -705,57 +705,6 @@ async def api_chat(request: Request):
             "intent": "error",
             "error": str(e),
         })
-
-@app.post("/api/chat/stream")
-async def api_chat_stream(request: Request):
-    import asyncio, json
-    from concurrent.futures import ThreadPoolExecutor
-
-    body = await request.json()
-    message    = body.get("message", "").strip()
-    history    = body.get("history", [])
-    filters    = body.get("filters", {})
-    session_id = body.get("session_id") or None
-
-    if not message:
-        raise HTTPException(400, "Message tidak boleh kosong")
-
-    queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
-
-    def status_cb(event: dict):
-        loop.call_soon_threadsafe(queue.put_nowait, {"type": "status", **event})
-
-    def run_chat():
-        try:
-            result = chatbot_chat(message, history=history, filters=filters,
-                                  session_id=session_id, status_cb=status_cb)
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": "result", **result})
-        except Exception as e:
-            import traceback, logging
-            logging.error(f"[CHAT STREAM ERROR] {e}\n{traceback.format_exc()}")
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": str(e)})
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
-
-    executor = ThreadPoolExecutor(max_workers=1)
-    loop.run_in_executor(executor, run_chat)
-
-    async def generate():
-        try:
-            while True:
-                item = await asyncio.wait_for(queue.get(), timeout=135)
-                if item is None:
-                    break
-                yield f"data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n"
-        except asyncio.TimeoutError:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'timeout'}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
 
 # ─── TAG MAPPING ROUTES ──────────────────────────────────────────────────────
 
