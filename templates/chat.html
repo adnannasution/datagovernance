@@ -58,7 +58,7 @@
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem 1.25rem 1rem;
+  padding: 2rem 1.25rem 6rem;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -147,22 +147,28 @@
 
 /* Input bar */
 .chat-inputbar {
-  padding: 12px 1.25rem 16px;
-  border-top: 1px solid var(--border);
+  padding: 0 1.25rem 20px;
   background: transparent;
+  position: sticky;
+  bottom: 0;
 }
-.chat-inputbar-inner { max-width: 780px; margin: 0 auto; }
-.chat-input-wrap { display: flex; gap: 8px; align-items: flex-end; }
+.chat-inputbar-inner {
+  max-width: 780px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+  padding: 8px 8px 8px 14px;
+  border: 1px solid #e2e8f0;
+}
+.chat-input-wrap { display: flex; gap: 6px; align-items: flex-end; }
 #chat-input {
-  flex: 1; padding: 10px 14px;
-  border: 1px solid var(--border2); border-radius: 12px;
+  flex: 1; padding: 6px 4px;
+  border: none; outline: none;
   font-size: 13.5px; resize: none; line-height: 1.5;
   max-height: 160px; font-family: inherit;
-  background: #fff; color: var(--text);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background: transparent; color: var(--text);
 }
-#chat-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 .chat-send-btn {
   width: 38px; height: 38px; border-radius: 50%;
   background: var(--primary); border: none; cursor: pointer;
@@ -172,7 +178,7 @@
 .chat-send-btn svg { width: 15px; height: 15px; stroke: #fff; fill: none; stroke-width: 2; }
 .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .chat-send-btn:hover:not(:disabled) { background: var(--primary-dark); transform: scale(1.05); }
-.chat-input-meta { display: flex; align-items: center; margin-top: 6px; min-height: 18px; }
+.chat-input-meta { display: flex; align-items: center; margin-top: 4px; min-height: 18px; padding: 0 4px; }
 </style>
 
 <script>
