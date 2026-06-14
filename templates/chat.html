@@ -43,12 +43,13 @@
 {% block scripts %}
 <style>
 /* Override content padding for chat page */
-.content { padding: 0 !important; display: flex; flex-direction: column; height: calc(100vh - 56px); overflow: hidden; }
+.content { padding: 0 !important; height: calc(100vh - 56px); overflow: hidden; display: flex; flex-direction: column; }
 
 .chat-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  overflow: hidden;
   max-width: 780px;
   margin: 0 auto;
   width: 100%;
@@ -149,8 +150,7 @@
 .chat-inputbar {
   padding: 0 1.25rem 20px;
   background: transparent;
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
 }
 .chat-inputbar-inner {
   max-width: 780px;
