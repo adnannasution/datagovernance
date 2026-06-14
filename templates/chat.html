@@ -156,7 +156,11 @@ async function sendMessage() {
           updateStatusBubble(statusId, data.step, data.label);
         } else if (data.type === 'result') {
           removeStatusBubble(statusId);
-          appendAssistantBubble(data);
+          try {
+            appendAssistantBubble(data);
+          } catch(e) {
+            appendBubble('assistant', data.answer || '(jawaban kosong)');
+          }
           history.push({role: 'user', content: message});
           history.push({role: 'assistant', content: data.answer || ''});
           if (history.length > 20) history = history.slice(-20);
