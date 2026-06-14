@@ -37,7 +37,11 @@ TABLE_NEO4J_CONFIG = {
 }
 
 def get_driver():
-    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    return GraphDatabase.driver(
+        NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD),
+        connection_timeout=10,
+        max_transaction_retry_time=15,
+    )
 
 def test_connection() -> bool:
     try:
