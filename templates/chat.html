@@ -295,6 +295,11 @@ async function sendMessage() {
   } finally {
     clearTimeout(timer);
     isLoading = false;
+    // Safety: remove cursor if result event was missed
+    if (streamContentEl) {
+      streamContentEl.innerHTML = formatAnswer(streamAccumText);
+      streamBubbleEl = null; streamContentEl = null; streamAccumText = '';
+    }
     document.getElementById('send-btn').disabled = false;
     input.focus();
   }
