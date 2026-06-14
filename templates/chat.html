@@ -39,77 +39,30 @@
 
 {% block scripts %}
 <style>
-/* Streaming cursor */
-.stream-cursor {
-  display: inline-block;
-  color: #6366f1;
-  animation: blink-cursor 0.8s step-end infinite;
-  font-size: 14px;
-  margin-left: 1px;
-  vertical-align: middle;
-}
-@keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
-
 /* Assistant message open layout */
 .bubble-assistant { padding: 2px 0 8px; }
 .bubble-assistant .bubble-sources,
 .bubble-assistant .bubble-sql,
 .bubble-assistant .bubble-rewritten { margin-top: 10px; }
 
-/* Status bubble */
-.status-bubble {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  margin: 4px 0;
-  max-width: 420px;
-}
-.status-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #6366f1;
-  flex-shrink: 0;
+/* Loading dots */
+.loading-bubble { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.loading-bubble .status-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #6366f1; flex-shrink: 0;
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
+.loading-bubble .status-label { font-size: 12.5px; color: #475569; font-style: italic; }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.75); }
-}
-.status-label {
-  font-size: 12.5px;
-  color: #475569;
-  font-style: italic;
-}
-.status-step-tag {
-  font-size: 10px;
-  font-weight: 600;
-  color: #6366f1;
-  background: #eef2ff;
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 4px;
 }
 </style>
 
 <script>
 let history = [];
 let isLoading = false;
-let streamBubbleEl = null;
-let streamContentEl = null;
-let streamAccumText = '';
+let loadingId = null;
 const SESSION_ID = crypto.randomUUID();
-
-const STEP_ICONS = {
-  rewrite: '✏️', intent: '🧭', intent_result: '🎯',
-  embed: '🔢', search: '🔍', generate: '✍️',
-  gen_sql: '🛠️', exec_sql: '⚡', retry_sql: '🔄', format_sql: '📊',
-  graph_tag: '🔗', gen_cypher: '🛠️', exec_cypher: '⚡', retry_cypher: '🔄',
-  format_graph: '📊', synthesize: '🧩'
-};
 
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -125,14 +78,13 @@ function setSuggestion(text) {
   input.value = text; autoResize(input); input.focus();
 }
 
-// ─── Status bubble helpers ───────────────────────────────────────────────────
-function showStatusBubble(label, step) {
+function showLoading(label) {
   const container = document.getElementById('chat-messages');
-  const id = 'status-' + Date.now();
+  const id = 'loading-' + Date.now();
   const div = document.createElement('div');
   div.id = id;
   div.className = 'chat-bubble bubble-assistant';
-  div.innerHTML = `<div class="status-bubble">
+  div.innerHTML = `<div class="loading-bubble">
     <div class="status-dot"></div>
     <span class="status-label" id="${id}-label">${escapeHtml(label)}</span>
   </div>`;
@@ -141,82 +93,11 @@ function showStatusBubble(label, step) {
   return id;
 }
 
-function updateStatusBubble(id, label, step) {
-  const el = document.getElementById(id + '-label');
-  if (el) {
-    const icon = STEP_ICONS[step] || '';
-    el.textContent = (icon ? icon + ' ' : '') + label;
-  }
-  scrollToBottom();
-}
-
-function removeStatusBubble(id) {
+function removeLoading(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
 }
 
-function startStreamBubble(statusId) {
-  removeStatusBubble(statusId);
-  streamAccumText = '';
-  const container = document.getElementById('chat-messages');
-  streamBubbleEl = document.createElement('div');
-  streamBubbleEl.className = 'chat-bubble bubble-assistant';
-  streamContentEl = document.createElement('div');
-  streamContentEl.className = 'bubble-content';
-  streamBubbleEl.appendChild(streamContentEl);
-  container.appendChild(streamBubbleEl);
-  scrollToBottom();
-}
-
-function appendToken(text) {
-  if (!streamContentEl) return;
-  streamAccumText += text;
-  streamContentEl.innerHTML = formatAnswer(streamAccumText) + '<span class="stream-cursor">▍</span>';
-  scrollToBottom();
-}
-
-function appendBubbleMetadata(div, data) {
-  let html = '';
-
-  if (data.rewritten && data.rewritten !== data.message) {
-    html += `<div class="bubble-rewritten">
-      <span class="rewritten-label">🔄 Dipahami sebagai:</span>
-      <span class="rewritten-text">${escapeHtml(data.rewritten)}</span>
-    </div>`;
-  }
-
-  if (data.sources && data.sources.length > 0) {
-    html += `<div class="bubble-sources">
-      <div class="sources-title">📄 Sumber Dokumen</div>
-      ${data.sources.map(s => `
-        <a href="/document/${s.doc_id}" class="source-item" target="_blank">
-          <span class="source-name">${escapeHtml(s.judul)}</span>
-          ${s.ru ? `<span class="source-badge">${s.ru}</span>` : ''}
-          ${s.halaman ? `<span class="source-badge">Hal. ${s.halaman}</span>` : ''}
-          <span class="source-score">${Math.round(s.score*100)}%</span>
-        </a>
-      `).join('')}
-    </div>`;
-  }
-
-  if (data.sql) {
-    html += `<details class="bubble-sql">
-      <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
-      <pre class="sql-code">${escapeHtml(data.sql)}</pre>
-    </details>`;
-  }
-
-  if (data.cypher) {
-    html += `<details class="bubble-sql">
-      <summary>🔗 Cypher Query</summary>
-      <pre class="sql-code">${escapeHtml(data.cypher)}</pre>
-    </details>`;
-  }
-
-  if (html) div.innerHTML += html;
-}
-
-// ─── Send message (SSE streaming) ───────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -228,66 +109,33 @@ async function sendMessage() {
   document.getElementById('send-btn').disabled = true;
 
   appendBubble('user', message);
+  loadingId = showLoading('Memproses pertanyaan...');
 
-  const filters = {};
-
-  const statusId = showStatusBubble('Memproses pertanyaan...');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 135000);
 
   try {
-    const response = await fetch('/api/chat/stream', {
+    const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message, history, filters, session_id: SESSION_ID}),
+      body: JSON.stringify({message, history, filters: {}, session_id: SESSION_ID}),
       signal: controller.signal
     });
 
+    removeLoading(loadingId);
+
     if (!response.ok) throw new Error('Server error ' + response.status);
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const data = await response.json();
+    appendAssistantBubble(data);
 
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, {stream: true});
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
+    history.push({role: 'user', content: message});
+    history.push({role: 'assistant', content: data.answer || ''});
+    if (history.length > 20) history = history.slice(-20);
+    showIntent(data.intent);
 
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        let data;
-        try { data = JSON.parse(line.slice(6)); } catch { continue; }
-
-        if (data.type === 'status') {
-          updateStatusBubble(statusId, data.label, data.step);
-        } else if (data.type === 'token') {
-          if (!streamContentEl) startStreamBubble(statusId);
-          appendToken(data.text);
-        } else if (data.type === 'result') {
-          removeStatusBubble(statusId);
-          if (streamBubbleEl) {
-            // remove cursor, re-render final markdown
-            streamContentEl.innerHTML = formatAnswer(streamAccumText);
-            appendBubbleMetadata(streamBubbleEl, data);
-            streamBubbleEl = null; streamContentEl = null; streamAccumText = '';
-          } else {
-            appendAssistantBubble(data);
-          }
-          history.push({role: 'user', content: message});
-          history.push({role: 'assistant', content: data.answer || ''});
-          if (history.length > 20) history = history.slice(-20);
-          showIntent(data.intent);
-        } else if (data.type === 'error') {
-          removeStatusBubble(statusId);
-          appendBubble('assistant', 'Error: ' + (data.message || 'Terjadi kesalahan.'));
-        }
-      }
-    }
   } catch (err) {
-    removeStatusBubble(statusId);
+    removeLoading(loadingId);
     const msg = err.name === 'AbortError'
       ? 'Permintaan timeout — server terlalu lama merespons. Coba lagi atau sederhanakan pertanyaan.'
       : 'Gagal terhubung ke server. Pastikan server berjalan dan coba refresh halaman.';
@@ -295,11 +143,7 @@ async function sendMessage() {
   } finally {
     clearTimeout(timer);
     isLoading = false;
-    // Safety: remove cursor if result event was missed
-    if (streamContentEl) {
-      streamContentEl.innerHTML = formatAnswer(streamAccumText);
-      streamBubbleEl = null; streamContentEl = null; streamAccumText = '';
-    }
+    loadingId = null;
     document.getElementById('send-btn').disabled = false;
     input.focus();
   }
@@ -319,7 +163,7 @@ function appendAssistantBubble(data) {
   const div = document.createElement('div');
   div.className = 'chat-bubble bubble-assistant';
 
-  let html = `<div class="bubble-content">${formatAnswer(data.answer)}</div>`;
+  let html = `<div class="bubble-content">${formatAnswer(data.answer || '')}</div>`;
 
   if (data.rewritten && data.rewritten !== data.message) {
     html += `<div class="bubble-rewritten">
