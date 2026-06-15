@@ -239,10 +239,16 @@ body {
 .sidebar.collapsed .nav-item.active svg { opacity: 1; }
 .sidebar.collapsed .nav-item:hover { background: #f1f5f9; }
 .sidebar.collapsed .sidebar-nav { padding: 0.5rem 0.25rem; gap: 2px; }
+.sidebar.collapsed .sidebar-close-btn { display: none; }
 
 /* Transition for collapse animation */
 .sidebar { transition: width 0.25s ease; }
-.sidebar * { transition: opacity 0.15s, display 0s; }
+.sidebar .brand-text,
+.sidebar .nav-item span,
+.sidebar .nav-group-label { transition: opacity 0.15s; }
+.sidebar.collapsed .brand-text,
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .nav-group-label { opacity: 0; }
 
 .main.sidebar-collapsed { margin-left: 56px; }
 
