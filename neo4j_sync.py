@@ -806,6 +806,7 @@ def get_table_graph_for_tag(tag: str):
                     "group": label,
                     "title": f"Tabel: {table_name}\nJumlah baris: {count}",
                     "count": count,
+                    "rel": rel,
                 })
                 edges.append({
                     "from": eq_id,
