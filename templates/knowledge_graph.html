@@ -127,31 +127,29 @@
 </div>
 
 <script>
-// ── Topology Visualization ──────────────────────────────────────────
-(function() {
-  const tableData = {{ table_sync_status | tojson }};
-  const svg = document.getElementById('topo-svg');
+// ── Topology Visualization (shared by Overview & "Per Tabel" view) ──
+const TOPOLOGY_DOMAIN_COLORS = {
+  'SAPNotification': '#3b82f6', 'SAPWorkOrder': '#3b82f6',
+  'BadActor': '#ef4444', 'ICUMonitoring': '#ef4444',
+  'IRKAPProgram': '#f59e0b', 'IRKAPActual': '#f59e0b',
+  'ATGMonitoring': '#8b5cf6', 'MeteringMonitor': '#8b5cf6',
+  'BOC': '#06b6d4', 'PipelineInspection': '#06b6d4',
+  'InspectionPlan': '#10b981', 'CriticalEquipment': '#10b981',
+  'ReadinessJetty': '#ec4899', 'ReadinessTank': '#ec4899', 'ReadinessSPM': '#ec4899',
+  'WorkplanJetty': '#f97316', 'WorkplanTank': '#f97316', 'WorkplanSPM': '#f97316',
+  'ZeroClamp': '#64748b', 'PowerStream': '#64748b',
+};
+
+function renderTopologySVG(svg, tableData, hubMain, hubSub, opts) {
+  opts = opts || {};
+  const showLegend = opts.showLegend !== false;
   const W = svg.parentElement.offsetWidth || 700;
-  const H = 420;
+  const H = opts.height || 420;
+  svg.innerHTML = '';
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
-  // Center node = Equipment
   const cx = W / 2, cy = H / 2;
   const R = Math.min(W, H) * 0.38;
-
-  // Domain color map
-  const domainColors = {
-    'SAPNotification': '#3b82f6', 'SAPWorkOrder': '#3b82f6',
-    'BadActor': '#ef4444', 'ICUMonitoring': '#ef4444',
-    'IRKAPProgram': '#f59e0b', 'IRKAPActual': '#f59e0b',
-    'ATGMonitoring': '#8b5cf6', 'MeteringMonitor': '#8b5cf6',
-    'BOC': '#06b6d4', 'PipelineInspection': '#06b6d4',
-    'InspectionPlan': '#10b981', 'CriticalEquipment': '#10b981',
-    'ReadinessJetty': '#ec4899', 'ReadinessTank': '#ec4899', 'ReadinessSPM': '#ec4899',
-    'WorkplanJetty': '#f97316', 'WorkplanTank': '#f97316', 'WorkplanSPM': '#f97316',
-    'ZeroClamp': '#64748b', 'PowerStream': '#64748b',
-  };
-
   const ns = 'http://www.w3.org/2000/svg';
 
   function el(tag, attrs, text) {
@@ -161,12 +159,20 @@
     return e;
   }
 
+  if (tableData.length === 0) {
+    svg.appendChild(el('text', {
+      x: cx, y: cy, 'text-anchor': 'middle', 'font-size': '13',
+      fill: 'var(--text3)', 'font-family': 'Inter, sans-serif'
+    }, 'Tidak ada tabel terhubung'));
+    return;
+  }
+
   // Draw lines first
   tableData.forEach((t, i) => {
     const angle = (2 * Math.PI * i) / tableData.length - Math.PI / 2;
     const nx = cx + R * Math.cos(angle);
     const ny = cy + R * Math.sin(angle);
-    const color = t.synced ? (domainColors[t.label] || '#22c55e') : '#cbd5e1';
+    const color = t.synced ? (TOPOLOGY_DOMAIN_COLORS[t.label] || '#22c55e') : '#cbd5e1';
     svg.appendChild(el('line', {
       x1: cx, y1: cy, x2: nx, y2: ny,
       stroke: color, 'stroke-width': t.synced ? 2 : 1,
@@ -197,7 +203,7 @@
     const angle = (2 * Math.PI * i) / tableData.length - Math.PI / 2;
     const nx = cx + R * Math.cos(angle);
     const ny = cy + R * Math.sin(angle);
-    const color = t.synced ? (domainColors[t.label] || '#22c55e') : '#94a3b8';
+    const color = t.synced ? (TOPOLOGY_DOMAIN_COLORS[t.label] || '#22c55e') : '#94a3b8';
     const r = t.synced ? 22 : 16;
 
     // Glow for synced
@@ -237,25 +243,33 @@
     }
   });
 
-  // Center Equipment node
+  // Center hub node
   svg.appendChild(el('circle', { cx, cy, r: 38, fill: '#2563eb', opacity: '0.15' }));
   svg.appendChild(el('circle', { cx, cy, r: 28, fill: '#2563eb' }));
   svg.appendChild(el('text', {
     x: cx, y: cy - 4, 'text-anchor': 'middle',
     'font-size': '9', fill: 'white', 'font-weight': '700', 'font-family': 'Inter, sans-serif'
-  }, 'Equipment'));
+  }, hubMain));
   svg.appendChild(el('text', {
     x: cx, y: cy + 8, 'text-anchor': 'middle',
     'font-size': '8', fill: '#bfdbfe', 'font-family': 'Inter, sans-serif'
-  }, '(hub)'));
+  }, hubSub));
 
   // Legend
-  const lg = [['Tersinkron', '#22c55e'], ['Belum sync', '#94a3b8']];
-  lg.forEach(([lbl, col], i) => {
-    const lx = 16, ly = H - 28 + i * 16;
-    svg.appendChild(el('circle', { cx: lx + 5, cy: ly, r: 5, fill: col }));
-    svg.appendChild(el('text', { x: lx + 14, y: ly + 4, 'font-size': '10', fill: 'var(--text3)', 'font-family': 'Inter, sans-serif' }, lbl));
-  });
+  if (showLegend) {
+    const lg = [['Tersinkron', '#22c55e'], ['Belum sync', '#94a3b8']];
+    lg.forEach(([lbl, col], i) => {
+      const lx = 16, ly = H - 28 + i * 16;
+      svg.appendChild(el('circle', { cx: lx + 5, cy: ly, r: 5, fill: col }));
+      svg.appendChild(el('text', { x: lx + 14, y: ly + 4, 'font-size': '10', fill: 'var(--text3)', 'font-family': 'Inter, sans-serif' }, lbl));
+    });
+  }
+}
+
+(function() {
+  const tableData = {{ table_sync_status | tojson }};
+  const svg = document.getElementById('topo-svg');
+  renderTopologySVG(svg, tableData, 'Equipment', '(hub)');
 })();
 </script>
 
@@ -879,11 +893,14 @@ async function loadGraph() {
       return;
     }
 
-    const isTableMode = viewMode === 'table';
+    if (viewMode === 'table') {
+      renderTableModeGraph(tag, data);
+      return;
+    }
+
     const visNodes = data.nodes.map(n => {
       _nodeDataMap[n.id] = n;
       const isEquipment = n.group === 'Equipment';
-      const tableSize = isTableMode && !isEquipment ? 18 + Math.min(n.count || 0, 30) : null;
       return {
         id: n.id,
         label: n.label,
@@ -894,8 +911,8 @@ async function loadGraph() {
           highlight: { background: getColor(n.group), border: '#fff' },
         },
         font: { color: '#1e293b', size: isEquipment ? 14 : 11, background: 'rgba(255,255,255,0.85)' },
-        size: isEquipment ? 30 : (tableSize || 20),
-        shape: isEquipment ? 'star' : (isTableMode ? 'box' : 'dot'),
+        size: isEquipment ? 30 : 20,
+        shape: isEquipment ? 'star' : 'dot',
         _group: n.group,
       };
     });
@@ -971,6 +988,31 @@ async function loadGraph() {
   }
 }
 
+function renderTableModeGraph(tag, data) {
+  if (graphNetwork) {
+    graphNetwork.destroy();
+    graphNetwork = null;
+  }
+  const container = document.getElementById('graph-container');
+  container.innerHTML = '<svg id="graph-table-svg" width="100%" height="520" style="display:block"></svg>';
+
+  const tableData = data.nodes
+    .filter(n => n.group !== 'Equipment')
+    .map(n => ({
+      table: n.label,
+      label: n.group,
+      synced: true,
+      connected: n.count || 0,
+      rel: n.rel || '',
+    }));
+
+  const svg = document.getElementById('graph-table-svg');
+  renderTopologySVG(svg, tableData, tag, 'Equipment', { height: 520, showLegend: false });
+
+  document.getElementById('graph-legend').classList.remove('hidden');
+  document.getElementById('export-btn').disabled = false;
+}
+
 function showNodePanel(node) {
   document.getElementById('node-panel-title').textContent = node.group + ': ' + node.label;
   const props = (node.title || '').split('\n').filter(Boolean);
@@ -993,15 +1035,46 @@ function showNodePanel(node) {
 }
 
 function exportPNG() {
-  if (!graphNetwork) return;
+  const canvas = document.querySelector('#graph-container canvas');
+  if (canvas) {
+    try {
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'knowledge-graph.png';
+      a.click();
+    } catch(e) {
+      alert('Export gagal: ' + e.message);
+    }
+    return;
+  }
+
+  const svg = document.querySelector('#graph-container svg');
+  if (!svg) { alert('Graph tidak ditemukan'); return; }
   try {
-    const canvas = document.querySelector('#graph-container canvas');
-    if (!canvas) { alert('Canvas tidak ditemukan'); return; }
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'knowledge-graph.png';
-    a.click();
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = function() {
+      const w = svg.clientWidth || 700;
+      const h = svg.clientHeight || 520;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * 2;
+      canvas.height = h * 2;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(2, 2);
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(svgUrl);
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'knowledge-graph.png';
+      a.click();
+    };
+    img.onerror = function() { alert('Export gagal'); URL.revokeObjectURL(svgUrl); };
+    img.src = svgUrl;
   } catch(e) {
     alert('Export gagal: ' + e.message);
   }
