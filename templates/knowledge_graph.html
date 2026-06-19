@@ -360,7 +360,16 @@
     <button class="btn" onclick="clearGraph()" style="font-size:12px">Clear</button>
     <button class="btn" onclick="exportPNG()" id="export-btn" style="font-size:12px" disabled>Export PNG</button>
   </div>
-  <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.75rem;font-size:13px">
+  <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.5rem;font-size:13px;flex-wrap:wrap">
+    <span style="color:var(--text2);font-weight:500">Tampilan:</span>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="graph-view-mode" value="row" checked onchange="onViewModeChange()"> Per Baris Data
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="radio" name="graph-view-mode" value="table" onchange="onViewModeChange()"> Per Tabel
+    </label>
+  </div>
+  <div id="graph-depth-row" style="display:flex;gap:1rem;align-items:center;margin-bottom:0.75rem;font-size:13px">
     <span style="color:var(--text2);font-weight:500">Kedalaman:</span>
     <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
       <input type="radio" name="graph-depth" value="1" checked> 1 hop
@@ -829,11 +838,17 @@ document.addEventListener('click', function(e) {
   }
 });
 
+function onViewModeChange() {
+  const mode = document.querySelector('input[name="graph-view-mode"]:checked').value;
+  document.getElementById('graph-depth-row').style.display = mode === 'table' ? 'none' : 'flex';
+}
+
 async function loadGraph() {
   const tag = document.getElementById('graph-tag-input').value.trim();
   closeTagDropdown();
   if (!tag) return;
 
+  const viewMode = document.querySelector('input[name="graph-view-mode"]:checked').value;
   const depth = document.querySelector('input[name="graph-depth"]:checked').value;
 
   document.getElementById('graph-error').classList.add('hidden');
@@ -844,7 +859,10 @@ async function loadGraph() {
   _nodeDataMap = {};
 
   try {
-    const res = await fetch('/api/neo4j/graph?tag=' + encodeURIComponent(tag) + '&depth=' + depth);
+    const url = viewMode === 'table'
+      ? '/api/neo4j/graph/by-table?tag=' + encodeURIComponent(tag)
+      : '/api/neo4j/graph?tag=' + encodeURIComponent(tag) + '&depth=' + depth;
+    const res = await fetch(url);
     const data = await res.json();
 
     if (data.error) {
@@ -861,8 +879,11 @@ async function loadGraph() {
       return;
     }
 
+    const isTableMode = viewMode === 'table';
     const visNodes = data.nodes.map(n => {
       _nodeDataMap[n.id] = n;
+      const isEquipment = n.group === 'Equipment';
+      const tableSize = isTableMode && !isEquipment ? 18 + Math.min(n.count || 0, 30) : null;
       return {
         id: n.id,
         label: n.label,
@@ -872,9 +893,9 @@ async function loadGraph() {
           border: getColor(n.group),
           highlight: { background: getColor(n.group), border: '#fff' },
         },
-        font: { color: '#fff', size: n.group === 'Equipment' ? 14 : 11 },
-        size: n.group === 'Equipment' ? 30 : 20,
-        shape: n.group === 'Equipment' ? 'star' : 'dot',
+        font: { color: '#1e293b', size: isEquipment ? 14 : 11, background: 'rgba(255,255,255,0.85)' },
+        size: isEquipment ? 30 : (tableSize || 20),
+        shape: isEquipment ? 'star' : (isTableMode ? 'box' : 'dot'),
         _group: n.group,
       };
     });
