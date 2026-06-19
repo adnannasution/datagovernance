@@ -855,6 +855,10 @@ document.addEventListener('click', function(e) {
 function onViewModeChange() {
   const mode = document.querySelector('input[name="graph-view-mode"]:checked').value;
   document.getElementById('graph-depth-row').style.display = mode === 'table' ? 'none' : 'flex';
+  const tag = document.getElementById('graph-tag-input').value.trim();
+  if (tag && document.getElementById('graph-container').children.length > 0) {
+    loadGraph();
+  }
 }
 
 async function loadGraph() {
