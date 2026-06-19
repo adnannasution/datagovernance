@@ -758,6 +758,67 @@ def get_graph_for_tag(tag: str, depth: int = 1):
     return {"nodes": nodes, "edges": edges}
 
 
+def get_table_graph_for_tag(tag: str):
+    """Aggregate view: 1 node per table/label connected to the Equipment (any count > 0), instead of 1 node per row."""
+    driver = get_driver()
+    if driver is None:
+        return {"nodes": [], "edges": [], "error": "Neo4j connection unavailable"}
+
+    nodes = []
+    edges = []
+
+    try:
+        with driver.session() as session:
+            eq_result = session.run(
+                "MATCH (e:Equipment {tag_number: $tag}) RETURN e LIMIT 1",
+                tag=tag
+            )
+            if not eq_result.single():
+                return {"nodes": [], "edges": [], "error": f"Equipment '{tag}' not found"}
+
+            eq_id = f"E:{tag}"
+            nodes.append({
+                "id": eq_id,
+                "label": tag,
+                "group": "Equipment",
+                "title": f"tag_number: {tag}",
+            })
+
+            for table_name, cfg in TABLE_NEO4J_CONFIG.items():
+                label = cfg["label"]
+                rel = cfg["rel"]
+                count_result = session.run(
+                    f"""
+                    MATCH (e:Equipment {{tag_number: $tag}})-[r]-(n:{label})
+                    RETURN count(DISTINCT n) AS c
+                    """,
+                    tag=tag
+                )
+                rec = count_result.single()
+                count = rec["c"] if rec else 0
+                if not count:
+                    continue
+
+                table_node_id = f"T:{table_name}"
+                nodes.append({
+                    "id": table_node_id,
+                    "label": table_name,
+                    "group": label,
+                    "title": f"Tabel: {table_name}\nJumlah baris: {count}",
+                    "count": count,
+                })
+                edges.append({
+                    "from": eq_id,
+                    "to": table_node_id,
+                    "label": f"{rel} (x{count})",
+                })
+
+    except Exception as e:
+        return {"nodes": nodes, "edges": edges, "error": str(e)}
+
+    return {"nodes": nodes, "edges": edges}
+
+
 def get_coverage_stats() -> dict:
     """
     Compare PostgreSQL record counts vs Neo4j connected nodes per table.

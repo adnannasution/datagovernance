@@ -568,6 +568,13 @@ async def api_neo4j_graph(tag: str = "", depth: int = 1):
     from neo4j_sync import get_graph_for_tag
     return get_graph_for_tag(tag, depth=depth)
 
+@app.get("/api/neo4j/graph/by-table")
+async def api_neo4j_graph_by_table(tag: str = ""):
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag parameter required")
+    from neo4j_sync import get_table_graph_for_tag
+    return get_table_graph_for_tag(tag)
+
 @app.get("/api/neo4j/tags/search")
 async def api_neo4j_tags_search(q: str = "", limit: int = 20):
     """Search tag numbers yang sudah ada di Neo4j Equipment nodes (sudah tersinkron)."""
