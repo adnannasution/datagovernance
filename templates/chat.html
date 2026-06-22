@@ -40,6 +40,10 @@
 </div>
 {% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
 {% block scripts %}
 <style>
 /* Override content padding for chat page */
@@ -146,6 +150,21 @@
 .msg-rewritten { font-size:11px; color:var(--text3); font-style:italic; display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; margin-top: 4px; }
 .rewritten-label { color:var(--accent); font-style:normal; font-weight:500; white-space:nowrap; }
 
+/* Result table & chart */
+.msg-result { margin-top: 4px; }
+.result-toggle { display:inline-flex; gap:2px; background:var(--surface2); border-radius:8px; padding:2px; margin-bottom:8px; }
+.result-toggle button { border:none; background:transparent; cursor:pointer; font-size:11.5px; font-weight:500; padding:5px 12px; border-radius:6px; color:var(--text2); font-family:inherit; transition:background 0.15s, color 0.15s; }
+.result-toggle button.active { background:#fff; color:var(--primary); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+.result-table-wrap { overflow-x:auto; max-height:360px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); width:100%; }
+.result-table { width:100%; border-collapse:collapse; min-width:max-content; }
+.result-table th { text-align:left; padding:8px 12px; background:var(--surface2); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--text3); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; white-space:nowrap; }
+.result-table td { padding:8px 12px; border-bottom:1px solid var(--border); font-size:12.5px; color:var(--text); white-space:nowrap; max-width:240px; overflow:hidden; text-overflow:ellipsis; }
+.result-table tr:last-child td { border-bottom:none; }
+.result-table tbody tr:nth-child(even) td { background:var(--surface2); }
+.result-row-note { font-size:11px; color:var(--text3); margin-top:6px; }
+.result-chart-wrap { position:relative; width:100%; height:280px; max-height:280px; border:1px solid var(--border); border-radius:var(--radius); padding:10px; box-sizing:border-box; }
+.result-chart-wrap canvas { max-width:100%; max-height:100%; }
+
 /* Input bar — fixed at bottom */
 .chat-inputbar {
   position: fixed;
@@ -190,6 +209,8 @@ let history = [];
 let isLoading = false;
 let statusTimer = null;
 const SESSION_ID = crypto.randomUUID();
+let chartInstances = {};
+let resultDataStore = {};
 
 const FAKE_STEPS = [
   '✏️ Memahami pertanyaan...',
@@ -293,10 +314,137 @@ function appendUser(text) {
   c.appendChild(d); scrollToBottom();
 }
 
+function getResultRows(data) {
+  const rows = data.data || data.sql_data || [];
+  return Array.isArray(rows) ? rows : [];
+}
+
+function isNumericValue(v) {
+  if (v === null || v === undefined || v === '') return false;
+  if (typeof v === 'number') return Number.isFinite(v);
+  if (typeof v !== 'string') return false;
+  return /^-?\d+(\.\d+)?$/.test(v.trim());
+}
+
+function analyzeColumns(rows) {
+  const cols = Object.keys(rows[0] || {});
+  const numericCols = [];
+  const labelCols = [];
+  cols.forEach(col => {
+    const samples = rows.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+    const isNumeric = samples.length > 0 && samples.every(isNumericValue);
+    if (isNumeric) numericCols.push(col); else labelCols.push(col);
+  });
+  return { cols, numericCols, labelCols };
+}
+
+function getChartSpec(rows) {
+  if (!rows || rows.length < 1) return null;
+  const { numericCols, labelCols } = analyzeColumns(rows);
+  if (numericCols.length === 0 || labelCols.length === 0) return null;
+  return { labelCol: labelCols[0], valueCol: numericCols[0] };
+}
+
+function renderResultTable(rows, totalRows) {
+  if (!rows || rows.length === 0) return '';
+  const cols = Object.keys(rows[0]);
+  const thead = `<tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
+  const tbody = rows.map(row => {
+    const tds = cols.map(c => {
+      const v = row[c];
+      const display = (v === null || v === undefined) ? '—' : String(v);
+      const esc = escapeHtml(display);
+      return `<td title="${esc}">${esc}</td>`;
+    }).join('');
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  let note = '';
+  if (totalRows && totalRows > rows.length) {
+    note = `<div class="result-row-note">Menampilkan ${rows.length} dari ${totalRows} hasil</div>`;
+  }
+  return `
+    <div class="result-table-wrap">
+      <table class="result-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    </div>
+    ${note}`;
+}
+
+function renderResultBlock(rows, totalRows, msgId) {
+  if (!rows || rows.length === 0) return '';
+  const tableHtml = renderResultTable(rows, totalRows);
+  const chartSpec = getChartSpec(rows);
+
+  if (!chartSpec) {
+    return `<div class="msg-result" id="result-${msgId}">${tableHtml}</div>`;
+  }
+
+  resultDataStore[msgId] = { rows, chartSpec };
+
+  return `
+    <div class="msg-result" id="result-${msgId}">
+      <div class="result-toggle">
+        <button class="active" data-view="table" onclick="switchResultView('${msgId}','table')">📋 Tabel</button>
+        <button data-view="chart" onclick="switchResultView('${msgId}','chart')">📊 Chart</button>
+      </div>
+      <div class="result-table-slot">${tableHtml}</div>
+      <div class="result-chart-slot" style="display:none">
+        <div class="result-chart-wrap"><canvas id="chart-${msgId}"></canvas></div>
+      </div>
+    </div>`;
+}
+
+function switchResultView(msgId, view) {
+  const root = document.getElementById('result-' + msgId);
+  if (!root) return;
+  root.querySelectorAll('.result-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  root.querySelector('.result-table-slot').style.display = view === 'table' ? '' : 'none';
+  root.querySelector('.result-chart-slot').style.display = view === 'chart' ? '' : 'none';
+
+  if (view === 'chart' && !chartInstances[msgId]) {
+    buildChart(msgId);
+  }
+}
+
+function buildChart(msgId) {
+  const entry = resultDataStore[msgId];
+  if (!entry) return;
+  const { rows, chartSpec } = entry;
+  const canvas = document.getElementById('chart-' + msgId);
+  if (!canvas) return;
+
+  const labels = rows.map(r => String(r[chartSpec.labelCol] ?? ''));
+  const values = rows.map(r => {
+    const v = r[chartSpec.valueCol];
+    return typeof v === 'number' ? v : parseFloat(v) || 0;
+  });
+
+  const ctx = canvas.getContext('2d');
+  chartInstances[msgId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: chartSpec.valueCol,
+        data: values,
+        backgroundColor: '#6366f1'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+
 function appendAssistant(data) {
   const c = document.getElementById('chat-messages');
   const d = document.createElement('div');
   d.className = 'msg-assistant';
+  const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
 
   let html = `<div class="msg-text">${formatAnswer(data.answer || '')}</div>`;
 
@@ -318,6 +466,12 @@ function appendAssistant(data) {
         </a>`).join('')}
     </div>`;
   }
+
+  const resultRows = getResultRows(data);
+  if (resultRows.length > 0) {
+    html += renderResultBlock(resultRows, data.total_rows, msgId);
+  }
+
   if (data.sql) {
     html += `<details class="msg-sql">
       <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
