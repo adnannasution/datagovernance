@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS tag_mapping (
     tag_variant VARCHAR(100) NOT NULL,
     source_table VARCHAR(100) NOT NULL,
     confidence NUMERIC(4,3) NOT NULL DEFAULT 1.0,
-    match_method VARCHAR(50) NOT NULL DEFAULT 'exact',  -- exact, fuzzy_token, fuzzy_levenshtein, manual
+    match_method VARCHAR(50) NOT NULL DEFAULT 'exact',  -- exact, exact_suffix, fuzzy_token, fuzzy_levenshtein, manual
     validated_by VARCHAR(100),
     validated_at TIMESTAMP,
     status VARCHAR(20) NOT NULL DEFAULT 'approved',  -- approved, pending, rejected
