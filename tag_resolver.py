@@ -19,6 +19,13 @@ def normalize_tag(tag: str) -> str:
     return tag
 
 
+def strip_numeric_suffix(tag: str) -> str:
+    """Strip trailing numeric suffix like /00, /01 (e.g. 211-AR-222/00 -> 211-AR-222)."""
+    if not tag:
+        return ""
+    return re.sub(r"/\d+$", "", tag.strip())
+
+
 def _build_canonical_index(conn, batch_size: int = 1000):
     """Build canonical tag lookup structures from master_data_equipment."""
     norm_to_canonical = {}
@@ -87,6 +94,11 @@ def _process_variant(variant, table_name, canonical_set, norm_to_canonical, pref
 
     if table_name in SAP_TABLES:
         return None
+
+    # Exact match minus trailing /NN suffix (e.g. 211-AR-222/00 -> 211-AR-222)
+    stripped = strip_numeric_suffix(variant)
+    if stripped != variant and stripped in canonical_set:
+        return stripped, 1.0, "exact_suffix", "approved"
 
     # Token/normalize match
     norm_variant = normalize_tag(variant)
