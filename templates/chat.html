@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="chat-page">
 
@@ -145,6 +149,13 @@
 .sql-code { font-size:11px; font-family:monospace; background:var(--surface2); padding:8px 10px; border-radius:var(--radius); margin-top:6px; white-space:pre-wrap; color:var(--text2); border:1px solid var(--border); }
 .msg-rewritten { font-size:11px; color:var(--text3); font-style:italic; display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; margin-top: 4px; }
 .rewritten-label { color:var(--accent); font-style:normal; font-weight:500; white-space:nowrap; }
+.msg-table-wrap { margin-top:8px; overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius); }
+.msg-table { border-collapse:collapse; width:100%; font-size:12px; }
+.msg-table th, .msg-table td { padding:6px 10px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+.msg-table th { background:var(--surface2); font-weight:600; color:var(--text2); }
+.msg-table tr:last-child td { border-bottom:none; }
+.msg-chart-wrap { margin-top:8px; padding:10px; border:1px solid var(--border); border-radius:var(--radius); background:#fff; max-width:520px; }
+.msg-chart-wrap canvas { max-height:280px; }
 
 /* Input bar — fixed at bottom */
 .chat-inputbar {
@@ -318,6 +329,17 @@ function appendAssistant(data) {
         </a>`).join('')}
     </div>`;
   }
+  let chartInfo = null;
+  if (Array.isArray(data.data) && data.data.length > 0 && typeof data.data[0] === 'object') {
+    html += renderDataTable(data.data);
+    chartInfo = buildChartInfo(data.data);
+    if (chartInfo) {
+      const chartId = `chart-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+      chartInfo.canvasId = chartId;
+      html += `<div class="msg-chart-wrap"><canvas id="${chartId}"></canvas></div>`;
+    }
+  }
+
   if (data.sql) {
     html += `<details class="msg-sql">
       <summary>🗄️ SQL Query ${data.total_rows ? `(${data.total_rows} hasil)` : ''}</summary>
@@ -333,6 +355,49 @@ function appendAssistant(data) {
 
   d.innerHTML = html;
   c.appendChild(d); scrollToBottom();
+
+  if (chartInfo) renderChart(chartInfo);
+}
+
+function renderDataTable(rows) {
+  const cols = Object.keys(rows[0]);
+  const thead = cols.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+  const tbody = rows.map(r => `<tr>${cols.map(c => `<td>${escapeHtml(r[c] ?? '')}</td>`).join('')}</tr>`).join('');
+  return `<div class="msg-table-wrap"><table class="msg-table">
+    <thead><tr>${thead}</tr></thead>
+    <tbody>${tbody}</tbody>
+  </table></div>`;
+}
+
+function buildChartInfo(rows) {
+  const cols = Object.keys(rows[0]);
+  if (cols.length !== 2) return null;
+  const numericCol = cols.find(c => rows.every(r => !isNaN(parseFloat(r[c])) && r[c] !== null));
+  const labelCol = cols.find(c => c !== numericCol);
+  if (!numericCol || !labelCol) return null;
+  return {
+    labels: rows.map(r => String(r[labelCol])),
+    values: rows.map(r => parseFloat(r[numericCol])),
+    labelName: labelCol,
+    valueName: numericCol
+  };
+}
+
+function renderChart(info) {
+  const canvas = document.getElementById(info.canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: info.labels,
+      datasets: [{ label: info.valueName, data: info.values, backgroundColor: '#3b82f6' }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
 }
 
 function showIntent(intent) {
