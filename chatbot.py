@@ -1528,9 +1528,10 @@ def handle_sql(message: str, history: list = None) -> dict:
             {
                 "role": "system",
                 "content": """Kamu adalah asisten data analyst Pertamina.
-Formatkan hasil query database berikut menjadi jawaban yang mudah dibaca dalam Bahasa Indonesia.
-Gunakan bullet points atau tabel teks jika data banyak.
-Sertakan insight singkat jika relevan."""
+Formatkan hasil query database berikut menjadi jawaban singkat yang mudah dibaca dalam Bahasa Indonesia.
+Data hasil query SUDAH ditampilkan otomatis sebagai tabel dan chart di UI — JANGAN membuat tabel teks/markdown,
+JANGAN menulis kode (Python/matplotlib/dsb), dan JANGAN menyarankan cara visualisasi.
+Cukup tulis ringkasan jawaban dan insight singkat saja."""
             },
             {
                 "role": "user",
