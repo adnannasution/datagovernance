@@ -371,10 +371,16 @@ function renderDataTable(rows) {
 
 function buildChartInfo(rows) {
   const cols = Object.keys(rows[0]);
-  if (cols.length !== 2) return null;
-  const numericCol = cols.find(c => rows.every(r => !isNaN(parseFloat(r[c])) && r[c] !== null));
-  const labelCol = cols.find(c => c !== numericCol);
-  if (!numericCol || !labelCol) return null;
+  const numericCol = cols.find(c => rows.every(r => !isNaN(parseFloat(r[c])) && r[c] !== null && r[c] !== ''));
+  if (!numericCol) return null;
+  const textCols = cols.filter(c => c !== numericCol);
+  if (textCols.length === 0) return null;
+  // pilih kolom teks dengan nilai rata-rata terpendek sebagai label (mis. "equipment" daripada "description")
+  const labelCol = textCols.reduce((shortest, c) => {
+    const avgLen = rows.reduce((sum, r) => sum + String(r[c] ?? '').length, 0) / rows.length;
+    const shortestAvgLen = rows.reduce((sum, r) => sum + String(r[shortest] ?? '').length, 0) / rows.length;
+    return avgLen < shortestAvgLen ? c : shortest;
+  }, textCols[0]);
   return {
     labels: rows.map(r => String(r[labelCol])),
     values: rows.map(r => parseFloat(r[numericCol])),
