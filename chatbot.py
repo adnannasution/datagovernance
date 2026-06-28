@@ -1246,10 +1246,8 @@ def detect_intent(message: str, history: list) -> str:
     domain_hits = sum(
         1 for kws in DOMAIN_KEYWORDS if any(kw in msg_lower for kw in kws)
     )
-    if domain_hits >= 2:
-        return "graph"
 
-    # Analytic keywords → graph
+    # Analytic/korelasi keywords → graph (cek lebih dulu: butuh relasi lintas tabel)
     ANALYTIC_KEYWORDS = [
         "korelasi", "hubungan", "lintas tabel", "analisa", "analisis",
         "scorecard", "ranking", "prioritas", "efektivitas", "bandingkan",
@@ -1263,13 +1261,19 @@ def detect_intent(message: str, history: list) -> str:
     if extract_tag_from_message(message):
         return "graph"
 
-    # Agregasi + 1 domain → sql (SQL lebih tepat untuk hitung-hitungan)
+    # Agregasi + minimal 1 domain → sql (SQL lebih tepat untuk hitung-hitungan).
+    # Diprioritaskan sebelum aturan multi-domain agar "berapa X dan Y" tidak
+    # terlanjur dipaksa ke graph padahal cuma butuh perhitungan sederhana.
     AGGREGATION_KEYWORDS = [
         "berapa", "jumlah", "total", "rata-rata", "average", "terbanyak",
         "terkecil", "terbesar", "tertinggi", "terendah", "count", "sum"
     ]
-    if domain_hits == 1 and any(kw in msg_lower for kw in AGGREGATION_KEYWORDS):
+    if domain_hits >= 1 and any(kw in msg_lower for kw in AGGREGATION_KEYWORDS):
         return "sql"
+
+    # 2+ domain tanpa agregasi → graph (kemungkinan butuh relasi antar domain)
+    if domain_hits >= 2:
+        return "graph"
 
     # Document keywords → rag
     DOC_KEYWORDS = ["dokumen", "sop", "prosedur", "manual", "laporan", "pdf", "upload"]
@@ -1388,13 +1392,67 @@ Selalu sebutkan sumber dokumen di akhir jawaban."""
     }
 
 # ─── Session Memory ───────────────────────────────────────────────────────────
+#
+# Persisten di PostgreSQL (tabel chat_sessions) supaya konsisten antar worker
+# dan tahan restart. Jika DB tidak tersedia, fallback ke memory dict.
+# Jawaban asisten dipangkas saat disimpan agar history tetap ramping.
 
-_session_store: dict = {}
+_session_store: dict = {}              # cache/fallback in-memory
 _SESSION_MAX_MESSAGES = 20
-_SESSION_TTL = 3600  # 1 jam
+_SESSION_TTL = 3600                    # 1 jam
+_SESSION_MAX_CONTENT = 600            # potong jawaban panjang saat disimpan
+_session_table_ready = False
+
+
+def _trim_history(history: list) -> list:
+    """Pangkas isi jawaban asisten yang panjang & batasi jumlah pesan."""
+    trimmed = []
+    for m in history[-_SESSION_MAX_MESSAGES:]:
+        content = m.get("content", "")
+        if m.get("role") == "assistant" and len(content) > _SESSION_MAX_CONTENT:
+            content = content[:_SESSION_MAX_CONTENT] + " …"
+        trimmed.append({"role": m.get("role"), "content": content})
+    return trimmed
+
+
+def _ensure_session_table():
+    global _session_table_ready
+    if _session_table_ready:
+        return True
+    try:
+        from db_equipment import get_conn
+        with get_conn() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    history    JSONB NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            """)
+            conn.commit()
+        _session_table_ready = True
+        return True
+    except Exception as e:
+        logging.warning(f"[SESSION] tabel tidak tersedia, fallback ke memory: {e}")
+        return False
 
 
 def _get_session_history(session_id: str) -> list:
+    if _ensure_session_table():
+        try:
+            from db_equipment import get_conn
+            with get_conn() as conn:
+                row = conn.execute("""
+                    SELECT history FROM chat_sessions
+                    WHERE session_id = %s
+                      AND updated_at > now() - (%s || ' seconds')::interval
+                """, (session_id, _SESSION_TTL)).fetchone()
+            if row and row.get("history"):
+                return row["history"]
+            return []
+        except Exception as e:
+            logging.warning(f"[SESSION] gagal baca DB, fallback ke memory: {e}")
+
     entry = _session_store.get(session_id)
     if not entry:
         return []
@@ -1405,13 +1463,43 @@ def _get_session_history(session_id: str) -> list:
 
 
 def _save_session_history(session_id: str, history: list):
+    trimmed = _trim_history(history)
+
+    if _ensure_session_table():
+        try:
+            from db_equipment import get_conn
+            with get_conn() as conn:
+                conn.execute("""
+                    INSERT INTO chat_sessions (session_id, history, updated_at)
+                    VALUES (%s, %s, now())
+                    ON CONFLICT (session_id)
+                    DO UPDATE SET history = EXCLUDED.history, updated_at = now()
+                """, (session_id, json.dumps(trimmed, ensure_ascii=False)))
+                conn.commit()
+            return
+        except Exception as e:
+            logging.warning(f"[SESSION] gagal simpan DB, fallback ke memory: {e}")
+
     _session_store[session_id] = {
-        "history": history[-_SESSION_MAX_MESSAGES:],
+        "history": trimmed,
         "last_active": time.time()
     }
 
 
 def _cleanup_sessions():
+    # Bersihkan sesi kedaluwarsa di DB; abaikan jika DB tidak tersedia.
+    if _ensure_session_table():
+        try:
+            from db_equipment import get_conn
+            with get_conn() as conn:
+                conn.execute("""
+                    DELETE FROM chat_sessions
+                    WHERE updated_at < now() - (%s || ' seconds')::interval
+                """, (_SESSION_TTL,))
+                conn.commit()
+        except Exception:
+            pass
+
     now = time.time()
     expired = [sid for sid, e in _session_store.items() if now - e["last_active"] > _SESSION_TTL]
     for sid in expired:
