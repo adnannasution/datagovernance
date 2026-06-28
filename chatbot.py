@@ -1896,6 +1896,50 @@ Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel at
 
 # ─── Main Chat Function ───────────────────────────────────────────────────────
 
+# Urutan handler cadangan jika handler utama tidak menemukan jawaban.
+_FALLBACK_CHAINS = {
+    "sql":    ["graph", "rag"],
+    "graph":  ["sql", "rag"],
+    "rag":    ["sql", "graph"],
+    "hybrid": ["graph", "sql", "rag"],
+}
+
+
+def _dispatch(intent: str, message: str, history: list, filters: dict) -> dict:
+    """Panggil handler sesuai intent."""
+    if intent == "rag":
+        return handle_rag(message, filters)
+    if intent == "sql":
+        return handle_sql(message, history)
+    if intent == "graph":
+        return handle_graph(message)
+    if intent == "hybrid":
+        return handle_hybrid(message, history)
+    return handle_general(message, history)
+
+
+def _result_is_empty(result: dict) -> bool:
+    """True jika handler gagal atau tidak menghasilkan data/jawaban yang berguna."""
+    if not result:
+        return True
+    if result.get("error"):
+        return True
+    # Ada data tabular (SQL/Graph)
+    data = result.get("data")
+    if isinstance(data, list) and len(data) > 0:
+        return False
+    if isinstance(data, dict) and data:
+        return False
+    # Ada data SQL dari hybrid
+    if result.get("sql_data"):
+        return False
+    # Ada sumber dokumen (RAG)
+    if result.get("sources"):
+        return False
+    # Tidak ada data maupun sumber → anggap kosong (jawaban hanya pesan "tidak ditemukan")
+    return True
+
+
 def chat(message: str, history: list = None, filters: dict = None,
          session_id: str = None) -> dict:
     """
@@ -1917,16 +1961,31 @@ def chat(message: str, history: list = None, filters: dict = None,
 
     intent = detect_intent(clean_message, history)
 
-    if intent == "rag":
-        result = handle_rag(clean_message, filters)
-    elif intent == "sql":
-        result = handle_sql(clean_message, history)
-    elif intent == "graph":
-        result = handle_graph(clean_message)
-    elif intent == "hybrid":
-        result = handle_hybrid(clean_message, history)
-    else:
-        result = handle_general(clean_message, history)
+    try:
+        result = _dispatch(intent, clean_message, history, filters)
+    except Exception as e:
+        logging.error(f"[DISPATCH ERROR] intent={intent}: {e}")
+        result = {"answer": "", "error": str(e)}
+
+    used_intent = intent
+
+    # Fallback berantai: jika handler utama tidak menemukan jawaban,
+    # coba handler lain sebelum menyerah (mengurangi jawaban "tidak bisa dijawab").
+    if intent in _FALLBACK_CHAINS and _result_is_empty(result):
+        for fb_intent in _FALLBACK_CHAINS[intent]:
+            try:
+                fb_result = _dispatch(fb_intent, clean_message, history, filters)
+            except Exception as e:
+                logging.warning(f"[FALLBACK ERROR] {intent}->{fb_intent}: {e}")
+                continue
+            if not _result_is_empty(fb_result):
+                logging.info(f"[FALLBACK] {intent} kosong, dijawab oleh {fb_intent}")
+                fb_result["fallback_from"] = intent
+                result = fb_result
+                used_intent = fb_intent
+                break
+
+    intent = used_intent
 
     # Simpan ke session memory
     if session_id:
