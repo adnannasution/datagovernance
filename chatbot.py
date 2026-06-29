@@ -1271,6 +1271,25 @@ def detect_intent(message: str, history: list) -> str:
     if domain_hits >= 1 and any(kw in msg_lower for kw in AGGREGATION_KEYWORDS):
         return "sql"
 
+    # User eksplisit minta data dari tabel/database → sql
+    SQL_SIGNAL_KEYWORDS = [
+        "dari tabel", "dari database", "dari db", "di tabel", "di database",
+        "query", "tabel", "database"
+    ]
+    if domain_hits >= 1 and any(kw in msg_lower for kw in SQL_SIGNAL_KEYWORDS):
+        return "sql"
+
+    # Pertanyaan listing data ("equipment apa/mana yang ...", "daftar", "tampilkan") + domain → sql
+    LIST_KEYWORDS = [
+        "apa saja", "apa aja", "mana saja", "yang mana", "list ", "daftar",
+        "tampilkan", "sebutkan", "tunjukkan"
+    ]
+    if domain_hits >= 1 and (
+        any(kw in msg_lower for kw in LIST_KEYWORDS)
+        or re.search(r"equipment\s+(apa|mana)", msg_lower)
+    ):
+        return "sql"
+
     # 2+ domain tanpa agregasi → graph (kemungkinan butuh relasi antar domain)
     if domain_hits >= 2:
         return "graph"
