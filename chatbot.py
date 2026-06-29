@@ -28,6 +28,7 @@ CATEGORICAL_COLUMNS = [
     ("master_data_equipment",       "criticality"),
     ("bad_actor_monitoring",        "status"),
     ("bad_actor_monitoring",        "action_plan_category"),
+    ("bad_actor_monitoring",        "ru"),
     ("icu_monitoring",              "icu_status"),
     ("icu_monitoring",              "mitigasi_category"),
     ("icu_monitoring",              "solution_category"),
@@ -281,6 +282,20 @@ monitoring_operasi     → filter by refinery_unit, unit_proses
 tkdn                   → filter by refinery_unit, tahun, bulan
 rcps                   → filter by kilang, disiplin, traffic
 rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
+
+=== KODE REFINERY UNIT (RU) — PENTING ===
+Kolom `ru` pada tabel monitoring (mis. bad_actor_monitoring) menyimpan KODE-K,
+BUKAN teks "RU 5" / "RU V". Pemetaannya:
+  RU II  (Dumai)      = K201
+  RU III (Plaju)      = K301
+  RU IV  (Cilacap)    = K401
+  RU V   (Balikpapan) = K501
+  RU VI  (Balongan)   = K601
+  RU VII (Kasim)      = K701
+Jadi apapun bentuk sebutan user untuk satu RU (mis. "RU 5", "RU V", "ru5",
+"RU V Balikpapan"), filter kolom `ru` HARUS memakai kode-K-nya, contoh: ru = 'K501'.
+(Catatan: master_data_equipment.maintenance_plant memakai format RU2..RU7 —
+gunakan format sesuai kolom/tabel yang difilter.)
 
 === TABEL MASTER ===
 
