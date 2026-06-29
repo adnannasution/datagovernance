@@ -103,64 +103,6 @@ _categorical_cache: dict = {}
 _categorical_last_refresh: float = 0
 _CATEGORICAL_TTL = 3600  # refresh tiap 1 jam
 
-# Kolom yang menyimpan Refinery Unit dalam berbagai format. Nilai aktualnya
-# ditemukan otomatis dari DB (jangan di-hardcode) supaya tidak basi.
-RU_COLUMNS = [
-    ("bad_actor_monitoring",   "ru"),
-    ("icu_monitoring",         "ru"),
-    ("boc",                    "ru"),
-    ("master_data_equipment",  "maintenance_plant"),
-    ("master_data_equipment",  "location"),
-    ("atg_monitoring",         "refinery_unit"),
-    ("metering_monitoring",    "refinery_unit"),
-    ("pipeline_inspection",    "refinery_unit"),
-    ("readiness_tank",         "refinery_unit"),
-    ("irkap_program",          "refinery_unit"),
-    ("rcps",                   "kilang"),
-    ("sap_work_orders",        "plant"),
-]
-
-_ru_ref_cache: dict = {"text": None, "ts": 0.0}
-
-
-def _build_ru_reference_prompt() -> str:
-    """Temukan nilai RU aktual dari tiap kolom RU dan format jadi teks prompt.
-    Dinamis + cache 1 jam, jadi mengikuti data sebenarnya, bukan tebakan statis."""
-    now = time.time()
-    if _ru_ref_cache["text"] is not None and (now - _ru_ref_cache["ts"]) < _CATEGORICAL_TTL:
-        return _ru_ref_cache["text"]
-
-    discovered = {}
-    try:
-        from db_equipment import get_conn
-        with get_conn() as conn:
-            for table, col in RU_COLUMNS:
-                try:
-                    rows = conn.execute(
-                        f"SELECT DISTINCT {col} FROM {table} "
-                        f"WHERE {col} IS NOT NULL AND {col}::text != '' "
-                        f"ORDER BY {col} LIMIT 30"
-                    ).fetchall()
-                    vals = [str(r[0]) for r in rows if r[0] is not None]
-                    if vals:
-                        discovered[f"{table}.{col}"] = vals
-                except Exception:
-                    pass
-    except Exception as e:
-        logging.warning(f"[RU REF] build failed: {e}")
-
-    if not discovered:
-        text = ""
-    else:
-        lines = ["\n=== NILAI RU AKTUAL DI DATABASE (ditemukan otomatis — pakai ini untuk filter) ==="]
-        for key, vals in discovered.items():
-            lines.append(f"{key}: " + ", ".join(f"'{v}'" for v in vals[:30]))
-        text = "\n".join(lines)
-
-    _ru_ref_cache["text"] = text
-    _ru_ref_cache["ts"] = now
-    return text
-
 
 def _build_categorical_values() -> dict:
     """Query DISTINCT values dari semua kolom kategorikal."""
@@ -290,49 +232,8 @@ def _build_neo4j_categorical_prompt() -> str:
 
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
-_live_schema_cache: dict = {"text": None, "ts": 0.0}
-_LIVE_SCHEMA_TTL = 21600  # 6 jam — struktur tabel jarang berubah
-
-
-def _build_live_schema_prompt() -> str:
-    """Inventori kolom AKTUAL tiap tabel dari information_schema (dinamis).
-    Ditambahkan DI ATAS schema kurasi — tidak menggantikannya — supaya kolom
-    baru yang belum terdokumentasi tetap terlihat LLM tanpa kehilangan makna."""
-    now = time.time()
-    if _live_schema_cache["text"] is not None and (now - _live_schema_cache["ts"]) < _LIVE_SCHEMA_TTL:
-        return _live_schema_cache["text"]
-
-    text = ""
-    try:
-        from db_equipment import get_conn, TABLE_CATALOG
-        catalog_tables = [t["table"] for t in TABLE_CATALOG]
-        with get_conn() as conn:
-            rows = conn.execute("""
-                SELECT table_name,
-                       string_agg(column_name, ', ' ORDER BY ordinal_position) AS cols
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = ANY(%s)
-                GROUP BY table_name
-                ORDER BY table_name
-            """, (catalog_tables,)).fetchall()
-        if rows:
-            lines = ["\n=== KOLOM AKTUAL TIAP TABEL (live dari information_schema) ==="]
-            for r in rows:
-                lines.append(f"{r['table_name']}: {r['cols']}")
-            text = "\n".join(lines)
-    except Exception as e:
-        logging.warning(f"[LIVE SCHEMA] build failed: {e}")
-
-    _live_schema_cache["text"] = text
-    _live_schema_cache["ts"] = now
-    return text
-
-
 def _get_db_schema() -> str:
-    return (DB_SCHEMA_FALLBACK
-            + _build_live_schema_prompt()
-            + _build_categorical_prompt()
-            + _build_ru_reference_prompt())
+    return DB_SCHEMA_FALLBACK + _build_categorical_prompt()
 
 
 def _get_neo4j_schema() -> str:
@@ -380,20 +281,6 @@ monitoring_operasi     → filter by refinery_unit, unit_proses
 tkdn                   → filter by refinery_unit, tahun, bulan
 rcps                   → filter by kilang, disiplin, traffic
 rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
-
-=== KODE REFINERY UNIT (RU) — PENTING ===
-User menyebut RU dalam banyak bentuk ("RU 5", "RU V", "ru5", "RU V Balikpapan").
-Nama-nomor: RU II=Dumai, III=Plaju, IV=Cilacap, V=Balikpapan, VI=Balongan, VII=Kasim.
-
-RU tersimpan dalam FORMAT BERBEDA tergantung kolom. NILAI ASLINYA ada di bagian
-"NILAI RU AKTUAL DI DATABASE" di bawah — SELALU cocokkan filter ke nilai nyata di sana,
-jangan menebak. Konvensi: digit penanda = nomor RU, dan satu RU bisa punya >1 sub-unit,
-jadi FILTER PAKAI PREFIX (LIKE), BUKAN sama-dengan. Contoh untuk RU 5:
-  - kolom kode-K `ru` (mis. bad_actor_monitoring): ru LIKE 'K5%'
-  - kolom angka `maintenance_plant`: maintenance_plant LIKE '65%'
-  - kolom teks `location`: location LIKE 'RU5%'
-Untuk kolom `refinery_unit` / `kilang` / `plant`, periksa nilai aktualnya di bagian
-bawah lalu sesuaikan filter dengan format yang benar.
 
 === TABEL MASTER ===
 
@@ -1382,25 +1269,6 @@ def detect_intent(message: str, history: list) -> str:
         "terkecil", "terbesar", "tertinggi", "terendah", "count", "sum"
     ]
     if domain_hits >= 1 and any(kw in msg_lower for kw in AGGREGATION_KEYWORDS):
-        return "sql"
-
-    # User eksplisit minta data dari tabel/database → sql
-    SQL_SIGNAL_KEYWORDS = [
-        "dari tabel", "dari database", "dari db", "di tabel", "di database",
-        "query", "tabel", "database"
-    ]
-    if domain_hits >= 1 and any(kw in msg_lower for kw in SQL_SIGNAL_KEYWORDS):
-        return "sql"
-
-    # Pertanyaan listing data ("equipment apa/mana yang ...", "daftar", "tampilkan") + domain → sql
-    LIST_KEYWORDS = [
-        "apa saja", "apa aja", "mana saja", "yang mana", "list ", "daftar",
-        "tampilkan", "sebutkan", "tunjukkan"
-    ]
-    if domain_hits >= 1 and (
-        any(kw in msg_lower for kw in LIST_KEYWORDS)
-        or re.search(r"equipment\s+(apa|mana)", msg_lower)
-    ):
         return "sql"
 
     # 2+ domain tanpa agregasi → graph (kemungkinan butuh relasi antar domain)
