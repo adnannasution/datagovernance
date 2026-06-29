@@ -284,18 +284,27 @@ rcps                   → filter by kilang, disiplin, traffic
 rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
 
 === KODE REFINERY UNIT (RU) — PENTING ===
-Kolom `ru` pada tabel monitoring (mis. bad_actor_monitoring) menyimpan KODE-K,
-BUKAN teks "RU 5" / "RU V". Pemetaannya:
-  RU II  (Dumai)      = K201
-  RU III (Plaju)      = K301
-  RU IV  (Cilacap)    = K401
-  RU V   (Balikpapan) = K501
-  RU VI  (Balongan)   = K601
-  RU VII (Kasim)      = K701
-Jadi apapun bentuk sebutan user untuk satu RU (mis. "RU 5", "RU V", "ru5",
-"RU V Balikpapan"), filter kolom `ru` HARUS memakai kode-K-nya, contoh: ru = 'K501'.
-(Catatan: master_data_equipment.maintenance_plant memakai format RU2..RU7 —
-gunakan format sesuai kolom/tabel yang difilter.)
+RU disimpan dalam BEBERAPA format berbeda tergantung kolom/tabel. Terjemahkan
+sebutan user (mis. "RU 5", "RU V", "ru5", "RU V Balikpapan") ke format kolom
+yang difilter:
+
+1) Kolom `ru` di tabel monitoring (mis. bad_actor_monitoring) = KODE-K "K<n>xx",
+   di mana digit kedua (<n>) = nomor RU dan dua digit terakhir = sub-unit.
+   Satu RU punya BANYAK sub-unit (K201, K202, ... semua = RU II), jadi
+   FILTER PAKAI PREFIX (LIKE), BUKAN sama-dengan:
+     RU II  (Dumai)      → ru LIKE 'K2%'
+     RU III (Plaju)      → ru LIKE 'K3%'
+     RU IV  (Cilacap)    → ru LIKE 'K4%'
+     RU V   (Balikpapan) → ru LIKE 'K5%'
+     RU VI  (Balongan)   → ru LIKE 'K6%'
+     RU VII (Kasim)      → ru LIKE 'K7%'
+
+2) master_data_equipment.maintenance_plant = kode angka "6<n>xx" (mis. 6201, 6202
+   = RU II). Filter prefix juga: RU V → maintenance_plant LIKE '65%'.
+   Kolom `location` di tabel sama berbentuk teks "RU2-UTL"/"RU2-HCC"
+   → bisa difilter location LIKE 'RU5%'.
+
+Intinya: untuk kolom `ru` kode-K gunakan LIKE 'K<n>%' sesuai nomor RU.
 
 === TABEL MASTER ===
 
