@@ -103,6 +103,64 @@ _categorical_cache: dict = {}
 _categorical_last_refresh: float = 0
 _CATEGORICAL_TTL = 3600  # refresh tiap 1 jam
 
+# Kolom yang menyimpan Refinery Unit dalam berbagai format. Nilai aktualnya
+# ditemukan otomatis dari DB (dinamis) supaya tidak perlu di-hardcode/ditebak.
+RU_COLUMNS = [
+    ("bad_actor_monitoring",   "ru"),
+    ("icu_monitoring",         "ru"),
+    ("boc",                    "ru"),
+    ("master_data_equipment",  "maintenance_plant"),
+    ("master_data_equipment",  "location"),
+    ("atg_monitoring",         "refinery_unit"),
+    ("metering_monitoring",    "refinery_unit"),
+    ("pipeline_inspection",    "refinery_unit"),
+    ("readiness_tank",         "refinery_unit"),
+    ("irkap_program",          "refinery_unit"),
+    ("rcps",                   "kilang"),
+    ("sap_work_orders",        "plant"),
+]
+
+_ru_ref_cache: dict = {"text": None, "ts": 0.0}
+
+
+def _build_ru_reference_prompt() -> str:
+    """Temukan nilai RU aktual dari tiap kolom RU dan format jadi teks prompt.
+    Dinamis + cache 1 jam, jadi mengikuti data sebenarnya, bukan tebakan."""
+    now = time.time()
+    if _ru_ref_cache["text"] is not None and (now - _ru_ref_cache["ts"]) < _CATEGORICAL_TTL:
+        return _ru_ref_cache["text"]
+
+    discovered = {}
+    try:
+        from db_equipment import get_conn
+        with get_conn() as conn:
+            for table, col in RU_COLUMNS:
+                try:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT {col} FROM {table} "
+                        f"WHERE {col} IS NOT NULL AND {col}::text != '' "
+                        f"ORDER BY {col} LIMIT 30"
+                    ).fetchall()
+                    vals = [str(r[0]) for r in rows if r[0] is not None]
+                    if vals:
+                        discovered[f"{table}.{col}"] = vals
+                except Exception:
+                    pass
+    except Exception as e:
+        logging.warning(f"[RU REF] build failed: {e}")
+
+    if not discovered:
+        text = ""
+    else:
+        lines = ["\n=== NILAI RU AKTUAL DI DATABASE (ditemukan otomatis — pakai ini untuk filter) ==="]
+        for key, vals in discovered.items():
+            lines.append(f"{key}: " + ", ".join(f"'{v}'" for v in vals[:30]))
+        text = "\n".join(lines)
+
+    _ru_ref_cache["text"] = text
+    _ru_ref_cache["ts"] = now
+    return text
+
 
 def _build_categorical_values() -> dict:
     """Query DISTINCT values dari semua kolom kategorikal."""
@@ -233,7 +291,7 @@ def _build_neo4j_categorical_prompt() -> str:
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
 def _get_db_schema() -> str:
-    return DB_SCHEMA_FALLBACK + _build_categorical_prompt()
+    return DB_SCHEMA_FALLBACK + _build_categorical_prompt() + _build_ru_reference_prompt()
 
 
 def _get_neo4j_schema() -> str:
