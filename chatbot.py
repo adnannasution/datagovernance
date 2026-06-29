@@ -282,6 +282,25 @@ tkdn                   → filter by refinery_unit, tahun, bulan
 rcps                   → filter by kilang, disiplin, traffic
 rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
 
+=== KODE REFINERY UNIT (RU) — PENTING ===
+User menyebut RU dalam banyak bentuk: "RU 5", "RU V", "ru5", "RU V Balikpapan".
+Nomor↔nama: RU II=Dumai, III=Plaju, IV=Cilacap, V=Balikpapan, VI=Balongan, VII=Kasim.
+
+RU tersimpan dalam FORMAT BERBEDA tergantung kolom. FILTER PAKAI PREFIX (LIKE),
+bukan sama-dengan, karena satu RU bisa punya >1 sub-unit (mis. RU 2 = K201 & K202):
+
+  • kolom `ru` (mis. bad_actor_monitoring) = kode-K "K<n>xx", digit ke-2 = nomor RU:
+      RU II→ru LIKE 'K2%'   RU III→'K3%'   RU IV→'K4%'
+      RU V →ru LIKE 'K5%'   RU VI →'K6%'   RU VII→'K7%'
+  • `master_data_equipment.maintenance_plant` = angka "6<n>xx":
+      RU V → maintenance_plant LIKE '65%'
+  • `master_data_equipment.location` = teks "RU<n>-area" (mis. RU2-UTL):
+      RU V → location LIKE 'RU5%'
+
+CATATAN: untuk kolom `refinery_unit`, `kilang`, dan `plant`, format nilainya
+belum dipastikan — cek nilai aktual di tabel terkait dan cocokkan secara fleksibel
+(boleh pakai ILIKE), jangan asumsikan satu format.
+
 === TABEL MASTER ===
 
 master_data_equipment
