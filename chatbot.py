@@ -106,16 +106,25 @@ _CATEGORICAL_TTL = 3600  # refresh tiap 1 jam
 # Kolom yang menyimpan Refinery Unit dalam berbagai format. Nilai aktualnya
 # ditemukan otomatis dari DB (dinamis) supaya tidak perlu di-hardcode/ditebak.
 RU_COLUMNS = [
+    # kolom `ru`
     ("bad_actor_monitoring",   "ru"),
     ("icu_monitoring",         "ru"),
     ("boc",                    "ru"),
-    ("master_data_equipment",  "maintenance_plant"),
-    ("master_data_equipment",  "location"),
+    ("anggaran_maintenance",   "ru"),
+    ("paf",                    "ru"),
+    ("issue_paf",              "ru"),
+    # kolom `refinery_unit`
     ("atg_monitoring",         "refinery_unit"),
     ("metering_monitoring",    "refinery_unit"),
     ("pipeline_inspection",    "refinery_unit"),
     ("readiness_tank",         "refinery_unit"),
     ("irkap_program",          "refinery_unit"),
+    ("rotor_monitoring",       "refinery_unit"),
+    ("monitoring_operasi",     "refinery_unit"),
+    ("tkdn",                   "refinery_unit"),
+    # kolom lain
+    ("master_data_equipment",  "maintenance_plant"),
+    ("master_data_equipment",  "location"),
     ("rcps",                   "kilang"),
     ("sap_work_orders",        "plant"),
 ]
@@ -343,6 +352,13 @@ rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
 === KODE REFINERY UNIT (RU) — PENTING ===
 User menyebut RU dalam banyak bentuk: "RU 5", "RU V", "ru5", "RU V Balikpapan".
 Nomor↔nama: RU II=Dumai, III=Plaju, IV=Cilacap, V=Balikpapan, VI=Balongan, VII=Kasim.
+
+PENTING: "RU" adalah SATU konsep tapi disimpan di NAMA KOLOM yang BERBEDA-BEDA
+tergantung tabel. Kolom yang mewakili RU bisa salah satu dari:
+  ru, refinery_unit, maintenance_plant, plant, kilang, location.
+Saat memfilter per RU, pakai kolom RU yang BENAR-BENAR ADA di tabel yang di-query
+(lihat daftar kolom tiap tabel + "NILAI RU AKTUAL DI DATABASE" di bawah), lalu
+sesuaikan dengan format kolom tersebut.
 
 RU tersimpan dalam FORMAT BERBEDA tergantung kolom. FILTER PAKAI PREFIX (LIKE),
 bukan sama-dengan, karena satu RU bisa punya >1 sub-unit (mis. RU 2 = K201 & K202):
