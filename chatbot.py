@@ -313,6 +313,12 @@ DB_SCHEMA_FALLBACK = """
 PostgreSQL Database Schema — Pertamina Data Governance
 
 === KOLOM TAG PER TABEL (WAJIB dipakai untuk JOIN) ===
+PENTING: "equipment" / "tag" / "tag number" adalah SATU konsep, tapi nama kolomnya
+BERBEDA-BEDA tiap tabel (equipment, tag_number, tag_no, tag_no_ln, tag_no_tangki,
+equipment_tag_no, dll). Saat user menyebut equipment/tag tertentu, pakai kolom tag
+yang BENAR-BENAR ADA di tabel yang di-query sesuai pemetaan di bawah, dan untuk JOIN
+antar tabel samakan lewat kolom tag masing-masing.
+
 master_data_equipment  → equipment
 bad_actor_monitoring   → tag_number
 icu_monitoring         → tag_no
