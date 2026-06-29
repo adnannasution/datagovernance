@@ -28,7 +28,6 @@ CATEGORICAL_COLUMNS = [
     ("master_data_equipment",       "criticality"),
     ("bad_actor_monitoring",        "status"),
     ("bad_actor_monitoring",        "action_plan_category"),
-    ("bad_actor_monitoring",        "ru"),
     ("icu_monitoring",              "icu_status"),
     ("icu_monitoring",              "mitigasi_category"),
     ("icu_monitoring",              "solution_category"),
@@ -103,6 +102,64 @@ CATEGORICAL_COLUMNS = [
 _categorical_cache: dict = {}
 _categorical_last_refresh: float = 0
 _CATEGORICAL_TTL = 3600  # refresh tiap 1 jam
+
+# Kolom yang menyimpan Refinery Unit dalam berbagai format. Nilai aktualnya
+# ditemukan otomatis dari DB (jangan di-hardcode) supaya tidak basi.
+RU_COLUMNS = [
+    ("bad_actor_monitoring",   "ru"),
+    ("icu_monitoring",         "ru"),
+    ("boc",                    "ru"),
+    ("master_data_equipment",  "maintenance_plant"),
+    ("master_data_equipment",  "location"),
+    ("atg_monitoring",         "refinery_unit"),
+    ("metering_monitoring",    "refinery_unit"),
+    ("pipeline_inspection",    "refinery_unit"),
+    ("readiness_tank",         "refinery_unit"),
+    ("irkap_program",          "refinery_unit"),
+    ("rcps",                   "kilang"),
+    ("sap_work_orders",        "plant"),
+]
+
+_ru_ref_cache: dict = {"text": None, "ts": 0.0}
+
+
+def _build_ru_reference_prompt() -> str:
+    """Temukan nilai RU aktual dari tiap kolom RU dan format jadi teks prompt.
+    Dinamis + cache 1 jam, jadi mengikuti data sebenarnya, bukan tebakan statis."""
+    now = time.time()
+    if _ru_ref_cache["text"] is not None and (now - _ru_ref_cache["ts"]) < _CATEGORICAL_TTL:
+        return _ru_ref_cache["text"]
+
+    discovered = {}
+    try:
+        from db_equipment import get_conn
+        with get_conn() as conn:
+            for table, col in RU_COLUMNS:
+                try:
+                    rows = conn.execute(
+                        f"SELECT DISTINCT {col} FROM {table} "
+                        f"WHERE {col} IS NOT NULL AND {col}::text != '' "
+                        f"ORDER BY {col} LIMIT 30"
+                    ).fetchall()
+                    vals = [str(r[0]) for r in rows if r[0] is not None]
+                    if vals:
+                        discovered[f"{table}.{col}"] = vals
+                except Exception:
+                    pass
+    except Exception as e:
+        logging.warning(f"[RU REF] build failed: {e}")
+
+    if not discovered:
+        text = ""
+    else:
+        lines = ["\n=== NILAI RU AKTUAL DI DATABASE (ditemukan otomatis — pakai ini untuk filter) ==="]
+        for key, vals in discovered.items():
+            lines.append(f"{key}: " + ", ".join(f"'{v}'" for v in vals[:30]))
+        text = "\n".join(lines)
+
+    _ru_ref_cache["text"] = text
+    _ru_ref_cache["ts"] = now
+    return text
 
 
 def _build_categorical_values() -> dict:
@@ -234,7 +291,7 @@ def _build_neo4j_categorical_prompt() -> str:
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
 def _get_db_schema() -> str:
-    return DB_SCHEMA_FALLBACK + _build_categorical_prompt()
+    return DB_SCHEMA_FALLBACK + _build_categorical_prompt() + _build_ru_reference_prompt()
 
 
 def _get_neo4j_schema() -> str:
@@ -284,27 +341,18 @@ rcps                   → filter by kilang, disiplin, traffic
 rcps_rekomendasi       → filter by kilang, traffic, recommendation_category
 
 === KODE REFINERY UNIT (RU) — PENTING ===
-RU disimpan dalam BEBERAPA format berbeda tergantung kolom/tabel. Terjemahkan
-sebutan user (mis. "RU 5", "RU V", "ru5", "RU V Balikpapan") ke format kolom
-yang difilter:
+User menyebut RU dalam banyak bentuk ("RU 5", "RU V", "ru5", "RU V Balikpapan").
+Nama-nomor: RU II=Dumai, III=Plaju, IV=Cilacap, V=Balikpapan, VI=Balongan, VII=Kasim.
 
-1) Kolom `ru` di tabel monitoring (mis. bad_actor_monitoring) = KODE-K "K<n>xx",
-   di mana digit kedua (<n>) = nomor RU dan dua digit terakhir = sub-unit.
-   Satu RU punya BANYAK sub-unit (K201, K202, ... semua = RU II), jadi
-   FILTER PAKAI PREFIX (LIKE), BUKAN sama-dengan:
-     RU II  (Dumai)      → ru LIKE 'K2%'
-     RU III (Plaju)      → ru LIKE 'K3%'
-     RU IV  (Cilacap)    → ru LIKE 'K4%'
-     RU V   (Balikpapan) → ru LIKE 'K5%'
-     RU VI  (Balongan)   → ru LIKE 'K6%'
-     RU VII (Kasim)      → ru LIKE 'K7%'
-
-2) master_data_equipment.maintenance_plant = kode angka "6<n>xx" (mis. 6201, 6202
-   = RU II). Filter prefix juga: RU V → maintenance_plant LIKE '65%'.
-   Kolom `location` di tabel sama berbentuk teks "RU2-UTL"/"RU2-HCC"
-   → bisa difilter location LIKE 'RU5%'.
-
-Intinya: untuk kolom `ru` kode-K gunakan LIKE 'K<n>%' sesuai nomor RU.
+RU tersimpan dalam FORMAT BERBEDA tergantung kolom. NILAI ASLINYA ada di bagian
+"NILAI RU AKTUAL DI DATABASE" di bawah — SELALU cocokkan filter ke nilai nyata di sana,
+jangan menebak. Konvensi: digit penanda = nomor RU, dan satu RU bisa punya >1 sub-unit,
+jadi FILTER PAKAI PREFIX (LIKE), BUKAN sama-dengan. Contoh untuk RU 5:
+  - kolom kode-K `ru` (mis. bad_actor_monitoring): ru LIKE 'K5%'
+  - kolom angka `maintenance_plant`: maintenance_plant LIKE '65%'
+  - kolom teks `location`: location LIKE 'RU5%'
+Untuk kolom `refinery_unit` / `kilang` / `plant`, periksa nilai aktualnya di bagian
+bawah lalu sesuaikan filter dengan format yang benar.
 
 === TABEL MASTER ===
 
