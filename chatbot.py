@@ -1984,13 +1984,24 @@ Jawab dalam Bahasa Indonesia. Singkat, jelas, tidak perlu menyebut nama tabel at
 
 # ─── Main Chat Function ───────────────────────────────────────────────────────
 
+# Sementara dimatikan: jangan menjawab dari dokumen (RAG). Hanya SQL & Graph.
+# Set True untuk mengaktifkan kembali RAG/hybrid.
+ENABLE_RAG = False
+
 # Urutan handler cadangan jika handler utama tidak menemukan jawaban.
-_FALLBACK_CHAINS = {
-    "sql":    ["graph", "rag"],
-    "graph":  ["sql", "rag"],
-    "rag":    ["sql", "graph"],
-    "hybrid": ["graph", "sql", "rag"],
-}
+if ENABLE_RAG:
+    _FALLBACK_CHAINS = {
+        "sql":    ["graph", "rag"],
+        "graph":  ["sql", "rag"],
+        "rag":    ["sql", "graph"],
+        "hybrid": ["graph", "sql", "rag"],
+    }
+else:
+    # Tanpa RAG: cukup saling-fallback antara SQL dan Graph.
+    _FALLBACK_CHAINS = {
+        "sql":   ["graph"],
+        "graph": ["sql"],
+    }
 
 
 def _dispatch(intent: str, message: str, history: list, filters: dict) -> dict:
@@ -2048,6 +2059,10 @@ def chat(message: str, history: list = None, filters: dict = None,
     clean_message = rewrite_query(message, history)
 
     intent = detect_intent(clean_message, history)
+
+    # RAG dimatikan sementara: alihkan intent dokumen (rag/hybrid) ke SQL.
+    if not ENABLE_RAG and intent in ("rag", "hybrid"):
+        intent = "sql"
 
     try:
         result = _dispatch(intent, clean_message, history, filters)
