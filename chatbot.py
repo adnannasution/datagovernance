@@ -290,8 +290,49 @@ def _build_neo4j_categorical_prompt() -> str:
 
 # ─── Dynamic schema helpers ───────────────────────────────────────────────────
 
+_live_schema_cache: dict = {"text": None, "ts": 0.0}
+_LIVE_SCHEMA_TTL = 21600  # 6 jam — struktur tabel jarang berubah
+
+
+def _build_live_schema_prompt() -> str:
+    """Inventori kolom AKTUAL tiap tabel dari information_schema (dinamis).
+    Ditambahkan DI ATAS schema kurasi — tidak menggantikannya — supaya kolom
+    baru yang belum terdokumentasi tetap terlihat LLM tanpa kehilangan makna."""
+    now = time.time()
+    if _live_schema_cache["text"] is not None and (now - _live_schema_cache["ts"]) < _LIVE_SCHEMA_TTL:
+        return _live_schema_cache["text"]
+
+    text = ""
+    try:
+        from db_equipment import get_conn, TABLE_CATALOG
+        catalog_tables = [t["table"] for t in TABLE_CATALOG]
+        with get_conn() as conn:
+            rows = conn.execute("""
+                SELECT table_name,
+                       string_agg(column_name, ', ' ORDER BY ordinal_position) AS cols
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = ANY(%s)
+                GROUP BY table_name
+                ORDER BY table_name
+            """, (catalog_tables,)).fetchall()
+        if rows:
+            lines = ["\n=== KOLOM AKTUAL TIAP TABEL (live dari information_schema) ==="]
+            for r in rows:
+                lines.append(f"{r['table_name']}: {r['cols']}")
+            text = "\n".join(lines)
+    except Exception as e:
+        logging.warning(f"[LIVE SCHEMA] build failed: {e}")
+
+    _live_schema_cache["text"] = text
+    _live_schema_cache["ts"] = now
+    return text
+
+
 def _get_db_schema() -> str:
-    return DB_SCHEMA_FALLBACK + _build_categorical_prompt() + _build_ru_reference_prompt()
+    return (DB_SCHEMA_FALLBACK
+            + _build_live_schema_prompt()
+            + _build_categorical_prompt()
+            + _build_ru_reference_prompt())
 
 
 def _get_neo4j_schema() -> str:
