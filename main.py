@@ -58,6 +58,16 @@ async def page_executive(request: Request):
         "title": "Executive Dashboard"
     })
 
+@app.get("/dashboard/executive/debug")
+async def page_executive_debug():
+    # Diagnostics: shows DB connectivity, real columns/row-counts per source
+    # table, RU-string matching, and per-section live/error status. Use this to
+    # see WHY a KPI is still mock (empty table, cast error, column mismatch).
+    try:
+        return JSONResponse(executive_data.diagnostics())
+    except Exception as e:
+        return JSONResponse({"db": f"diagnostics failed: {e!r}"})
+
 @app.get("/dashboard/drilldown", response_class=HTMLResponse)
 async def page_drilldown(request: Request, ru: str = ""):
     return templates.TemplateResponse(request, "drilldown.html", {

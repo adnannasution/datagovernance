@@ -583,6 +583,76 @@ def get_executive_snapshot() -> dict:
     return snap
 
 
+def diagnostics() -> dict:
+    """Self-contained probe to explain WHY sections are live vs mock.
+
+    Returns per-table: exists / row count / real columns / RU sample values +
+    whether they match the normalizer; plus a simulation of the cast-risky
+    queries (ATG expiry, IRKAP RKAP, PAF/capacity/spend introspection) with the
+    actual exception text when they fail. Consumed by /dashboard/executive/debug.
+    """
+    out = {"db": "unknown", "live_sections": None, "tables": {}, "sections": {}}
+    if _get_conn is None:
+        out["db"] = "db_equipment import failed (psycopg/dotenv missing?)"
+        return out
+    try:
+        conn = _get_conn()
+    except Exception as e:
+        out["db"] = f"connect failed: {e!r}"
+        return out
+    out["db"] = "connected"
+
+    probe_tables = [
+        "paf", "monitoring_operasi", "anggaran_maintenance", "atg_monitoring",
+        "metering_monitoring", "readiness_jetty", "readiness_spm",
+        "irkap_program", "bad_actor_monitoring", "icu_monitoring", "zero_clamp",
+    ]
+    try:
+        with conn:
+            for t in probe_tables:
+                info = {}
+                try:
+                    if not _table_exists(conn, t):
+                        out["tables"][t] = {"exists": False}
+                        continue
+                    cols = _columns(conn, t)
+                    info["columns"] = cols
+                    info["rows"] = conn.execute(
+                        f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+                    rc = _ru_col(cols)
+                    info["ru_col"] = rc
+                    if rc and info["rows"]:
+                        vals = conn.execute(
+                            f'SELECT DISTINCT "{rc}" v FROM {t} '
+                            f'WHERE "{rc}" IS NOT NULL LIMIT 15').fetchall()
+                        info["ru_samples"] = {str(r["v"]): match_ru(r["v"])
+                                              for r in vals}
+                except Exception as e:
+                    info["error"] = repr(e)
+                out["tables"][t] = info
+
+            # simulate cast-risky sections, capture real errors
+            def _sim(name, fn):
+                try:
+                    out["sections"][name] = {"ok": True, "result": fn()}
+                except Exception as e:
+                    out["sections"][name] = {"ok": False, "error": repr(e)}
+
+            _sim("plo", lambda: _plo_counts(conn)[0])
+            _sim("rkap", lambda: _rkap_from_irkap(conn))
+            _sim("program", lambda: _program_realization_by_ru(conn))
+            _sim("reliability", lambda: {k: v for k, v in
+                                         _reliability_counts(conn).items()})
+            _sim("paf", lambda: _introspect_ru_metric(
+                conn, "paf", ("target", "rencana"),
+                ("real", "aktual", "actual", "capai")))
+            _sim("capacity", lambda: _capacity_by_ru(conn))
+            _sim("spend", lambda: _spend(conn))
+    except Exception as e:
+        out["db"] = f"query phase failed: {e!r}"
+    return out
+
+
 def _recompute_status(ru: dict):
     """Derive overall RU status from its (possibly refreshed) metrics."""
     score = 0
