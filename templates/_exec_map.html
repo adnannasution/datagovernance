@@ -1,0 +1,42 @@
+{% from "_exec_components.html" import refinery_marker %}
+<div class="ex-map">
+  {# Stylized Indonesia silhouette — decorative SVG background (not geographically exact) #}
+  <svg class="ex-map-svg" viewBox="0 0 1000 480" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <defs>
+      <linearGradient id="exMapFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1b2b45"/>
+        <stop offset="100%" stop-color="#152238"/>
+      </linearGradient>
+    </defs>
+    {# Sumatra #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.5"
+      d="M120,120 L245,270 L235,300 L200,300 L110,175 L95,140 Z"/>
+    {# Kalimantan #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.5"
+      d="M540,150 L680,170 L700,250 L640,300 L560,290 L520,230 L520,180 Z"/>
+    {# Java #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.5"
+      d="M300,330 L520,340 L560,360 L520,375 L300,368 L270,350 Z"/>
+    {# Sulawesi #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.5"
+      d="M730,170 L770,150 L760,220 L800,250 L780,300 L740,270 L755,230 L720,235 Z"/>
+    {# Papua #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.5"
+      d="M860,210 L980,220 L985,300 L890,320 L855,270 Z"/>
+    {# Sulawesi/east islands scatter #}
+    <path fill="url(#exMapFill)" stroke="#2f486e" stroke-width="1.2"
+      d="M600,360 L660,355 L700,372 L640,385 Z"/>
+  </svg>
+
+  <div class="ex-map-markers">
+    {% for ru in snapshot.refineries %}{{ refinery_marker(ru) }}{% endfor %}
+  </div>
+
+  <div class="ex-map-compass">◈ N</div>
+  <div class="ex-map-legend">
+    <span><i class="ex-dot ex-dot-healthy"></i>Healthy</span>
+    <span><i class="ex-dot ex-dot-watch"></i>Watch</span>
+    <span><i class="ex-dot ex-dot-critical"></i>Critical</span>
+    <span><i class="ex-dot ex-dot-nodata"></i>No data</span>
+  </div>
+</div>

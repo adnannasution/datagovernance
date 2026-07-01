@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/executive.css"/>
+{% endblock %}
+{% block content %}
+<div class="exec-dash">
+  <header class="ex-header">
+    <div class="ex-header-main">
+      <h1 class="ex-title">Refinery Drill-down{% if ru %} — {{ ru }}{% endif %}</h1>
+      <p class="ex-subtitle">Detailed operational data for the selected Refinery Unit</p>
+    </div>
+    <div class="ex-header-controls">
+      <a class="ex-refresh" href="/dashboard/executive">← Back to Executive</a>
+    </div>
+  </header>
+  <div class="ex-mocklabel">Mockup data — replace with live snapshot API.</div>
+  <div class="ex-card" style="max-width:720px;">
+    <div class="ex-card-title">Coming soon</div>
+    <p style="color:var(--ex-text2); line-height:1.7;">
+      This is a placeholder drill-down page for
+      <b style="color:var(--ex-text);">{{ ru or 'the selected unit' }}</b>.
+      It will surface detailed operational data (OA/PAF trend, ICU &amp; Bad Actor items,
+      inspection plan, readiness &amp; workplan, certification status, spend breakdown)
+      sourced from the 28 reliability datasets.
+    </p>
+  </div>
+</div>
+{% endblock %}
