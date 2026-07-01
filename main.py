@@ -45,26 +45,27 @@ async def page_dashboard(request: Request):
     })
 
 @app.get("/dashboard/executive", response_class=HTMLResponse)
-async def page_executive(request: Request):
-    # Live data from the reliability tables (executive_data), with automatic
-    # per-section fallback to the mock skeleton (executive_mock) when the DB or
-    # a specific column is unavailable. Same dict shape either way.
+async def page_executive(request: Request, period: str = ""):
+    # Live data from the reliability tables (executive_data), filtered by the
+    # selected period, with automatic per-section fallback to the mock skeleton
+    # (executive_mock) when the DB or a specific column is unavailable.
     try:
-        snapshot = executive_data.get_executive_snapshot()
+        snapshot = executive_data.get_executive_snapshot(period)
     except Exception:
         snapshot = executive_mock.get_executive_snapshot()
     return templates.TemplateResponse(request, "executive.html", {
         "snapshot": snapshot,
+        "period": period,
         "title": "Executive Dashboard"
     })
 
 @app.get("/dashboard/executive/debug")
-async def page_executive_debug():
+async def page_executive_debug(period: str = ""):
     # Diagnostics: shows DB connectivity, real columns/row-counts per source
     # table, RU-string matching, and per-section live/error status. Use this to
     # see WHY a KPI is still mock (empty table, cast error, column mismatch).
     try:
-        return JSONResponse(executive_data.diagnostics())
+        return JSONResponse(executive_data.diagnostics(period))
     except Exception as e:
         return JSONResponse({"db": f"diagnostics failed: {e!r}"})
 
