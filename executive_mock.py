@@ -120,7 +120,7 @@ def _refineries() -> list:
             "spend": "On Plan", "spend_status": "healthy",
             "plo": "Safe", "plo_status": "healthy",
             "alerts": 1, "status": "healthy",
-            "map_x": 20, "map_y": 34,
+            "map_x": 23.0, "map_y": 32.0,
         },
         {
             "code": "RU3", "name": "RU III Plaju",
@@ -129,7 +129,7 @@ def _refineries() -> list:
             "spend": "Watch", "spend_status": "watch",
             "plo": "Watch", "plo_status": "watch",
             "alerts": 2, "status": "watch",
-            "map_x": 30, "map_y": 60,
+            "map_x": 26.0, "map_y": 51.0,
         },
         {
             "code": "RU4", "name": "RU IV Cilacap",
@@ -138,7 +138,7 @@ def _refineries() -> list:
             "spend": "Under-spend Risk", "spend_status": "watch",
             "plo": "Safe", "plo_status": "healthy",
             "alerts": 1, "status": "healthy",
-            "map_x": 45, "map_y": 74,
+            "map_x": 37.0, "map_y": 80.5,
         },
         {
             "code": "RU5", "name": "RU V Balikpapan",
@@ -147,7 +147,7 @@ def _refineries() -> list:
             "spend": "Execution Risk", "spend_status": "critical",
             "plo": "Watch", "plo_status": "watch",
             "alerts": 4, "status": "critical",
-            "map_x": 60, "map_y": 42,
+            "map_x": 54.0, "map_y": 47.0,
         },
         {
             "code": "RU6", "name": "RU VI Balongan",
@@ -156,7 +156,7 @@ def _refineries() -> list:
             "spend": "On Plan", "spend_status": "healthy",
             "plo": "Critical", "plo_status": "critical",
             "alerts": 5, "status": "critical",
-            "map_x": 40, "map_y": 66,
+            "map_x": 33.5, "map_y": 76.0,
         },
         {
             "code": "RU7", "name": "RU VII Kasim",
@@ -165,7 +165,7 @@ def _refineries() -> list:
             "spend": "Watch", "spend_status": "watch",
             "plo": "Watch", "plo_status": "watch",
             "alerts": 2, "status": "watch",
-            "map_x": 88, "map_y": 52,
+            "map_x": 85.5, "map_y": 44.0,
         },
         {
             "code": "TPPI", "name": "TPPI Tuban",
@@ -174,7 +174,7 @@ def _refineries() -> list:
             "spend": "Over-spend watch", "spend_status": "watch",
             "plo": "Critical", "plo_status": "critical",
             "alerts": 3, "status": "critical",
-            "map_x": 47, "map_y": 63,
+            "map_x": 45.0, "map_y": 76.0,
         },
     ]
 
