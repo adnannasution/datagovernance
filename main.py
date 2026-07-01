@@ -53,8 +53,13 @@ async def page_executive(request: Request, period: str = ""):
         snapshot = executive_data.get_executive_snapshot(period)
     except Exception:
         snapshot = executive_mock.get_executive_snapshot()
+    try:
+        methodology = executive_data.methodology(period)
+    except Exception:
+        methodology = {"entries": [], "db": "unavailable", "period": period}
     return templates.TemplateResponse(request, "executive.html", {
         "snapshot": snapshot,
+        "methodology": methodology,
         "period": period,
         "title": "Executive Dashboard"
     })

@@ -320,6 +320,16 @@
 .ex-ready-detail { font-size: 11px; color: var(--ex-text2); margin-top: 3px; }
 .ex-ready-src { font-size: 9.5px; color: var(--ex-text3); margin-top: 8px; }
 
+/* ── Methodology tab ── */
+.ex-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px; background: rgba(8,145,178,0.08); color: #0e7490;
+  border: 1px solid rgba(8,145,178,0.18); border-radius: 4px; padding: 1px 5px;
+  word-break: break-word;
+}
+.ex-method-table td { vertical-align: top; }
+.ex-method-table tr:hover { background: rgba(8,145,178,0.04); }
+
 /* ── Responsive ── */
 @media (max-width: 1100px) {
   .ex-kpi-strip { grid-template-columns: repeat(2, 1fr); }

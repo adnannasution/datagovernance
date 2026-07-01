@@ -797,6 +797,134 @@ def _recompute_status(ru):
     ru["status"] = ["healthy", "watch", "critical"][score]
 
 
+# ─── methodology (transparency) ───────────────────────────────────────────────
+# Each entry documents a metric: its source table(s), the columns used, the
+# formula/aggregation, the status thresholds, and a note. For the introspected
+# metrics the actually-detected column is filled in live (or marked ❓).
+def _methodology_entries():
+    return [
+        {"metric": "Operational Availability (OA)",
+         "source": "monitoring_operasi",
+         "detect": ("monitoring_operasi", ("oa", "availability", "ketersediaan", "avail")),
+         "columns": "kolom OA (mengandung 'oa'/'availability')",
+         "formula": "Rata-rata OA per RU, lalu nasional = rata-rata antar RU.",
+         "thresholds": "≥95 Healthy · 90–94 Watch · <90 Critical",
+         "note": "OA tidak punya tabel sendiri — diambil dari kolom availability di monitoring_operasi. Jika kolom tak ada → tetap mock."},
+        {"metric": "Plant Availability Factor (PAF)",
+         "source": "paf",
+         "detect2": ("paf", ("target", "rencana"), ("real", "aktual", "actual", "capai", "paf")),
+         "columns": "target + realisasi",
+         "formula": "Rata-rata realisasi per RU; nasional = rata-rata antar RU.",
+         "thresholds": "≥94 Healthy · 88–93 Watch · <88 Critical",
+         "note": "Angka teks (mis. '94,5') diparse otomatis."},
+        {"metric": "RKAP / Program Realization",
+         "source": "irkap_program",
+         "columns": "refinery_unit, status_prognosa, finish_plan, program_kerja",
+         "formula": "Realisasi% = selesai / total × 100 (selesai = status mengandung DONE/SELESAI/COMPLETE/100). Overdue = finish_plan < tanggal-acuan & belum selesai. Program% per RU = selesai/total per RU.",
+         "thresholds": "overdue>5 Critical · realisasi<85% Watch · selain itu Healthy",
+         "note": "Tanggal finish_plan dibanding tanggal-acuan (dari periode)."},
+        {"metric": "Maintenance Spend",
+         "source": "anggaran_maintenance",
+         "detect2": ("anggaran_maintenance", ("plan", "rkap", "anggaran", "budget"),
+                     ("aktual", "actual", "realisasi", "spend")),
+         "columns": "plan + aktual",
+         "formula": "Nasional = Σ aktual / Σ plan. %= aktual/plan × 100 (per RU untuk interpretasi).",
+         "thresholds": "<80% Under-spend · 100–105% Execution Risk · >105% Over-spend · selain itu On Plan",
+         "note": "Format ribuan titik (1.000.000.000) & desimal koma diparse otomatis."},
+        {"metric": "PLO / Certification Readiness",
+         "source": "atg_monitoring · metering_monitoring · readiness_jetty · readiness_spm",
+         "columns": "date_expired_atg / date_expired_metering / expired_tuks / expired_laik_operasi + refinery_unit",
+         "formula": "Active = jumlah baris. Bucket vs tanggal-acuan: Expired (tgl<acuan), ≤30 hari (exp_30), ≤90 hari (exp_90).",
+         "thresholds": "ada Expired → Critical · ada ≤30 hari → Watch · selain itu Healthy",
+         "note": "Semua item sertifikasi diagregasi dari 4 tabel ini (tidak ada 'PLO master')."},
+        {"metric": "Capacity / Utilization",
+         "source": "monitoring_operasi",
+         "detect2": ("monitoring_operasi", ("design", "desain", "nameplate"),
+                     ("actual", "aktual", "operasi", "feed", "current", "realisasi")),
+         "columns": "design_capacity + actual_capacity",
+         "formula": "Utilisasi% = actual / design × 100 per RU.",
+         "thresholds": "—",
+         "note": "Ditampilkan di peta & scorecard (current / design MBSD)."},
+        {"metric": "Alerts per RU (Reliability Hotspots)",
+         "source": "icu_monitoring · bad_actor_monitoring · zero_clamp · power_stream",
+         "columns": "icu_status, status, status_operation, ru/refinery_unit",
+         "formula": "Jumlah item aktif per RU: ICU HIGH/CRITICAL + Bad Actor status≠closed + Zero Clamp status≠lepas/closed + Power&Steam status_operation≠normal.",
+         "thresholds": "≥4 Critical · 2–3 Watch · <2 Healthy (mempengaruhi status keseluruhan RU)",
+         "note": "Item teratas ditampilkan sebagai kartu isu Reliability Hotspots."},
+        {"metric": "Regulatory Watchlist",
+         "source": "atg_monitoring · metering_monitoring · readiness_jetty/spm",
+         "columns": "date_expired_* + refinery_unit",
+         "formula": "Item sertifikasi yang Expired (severity Critical) atau expiring ≤90 hari (Watch), diurut severity lalu aging. Top 5.",
+         "thresholds": "Expired → Critical · Expiring → Watch",
+         "note": "Aging/Due dihitung relatif ke tanggal-acuan periode."},
+        {"metric": "Program Execution Watchlist",
+         "source": "workplan_jetty · workplan_tank · spm_workplan · inspection_plan",
+         "columns": "status_rtl, target, due_date, actual_date, refinery_unit",
+         "formula": "Workplan status_rtl≠done (target<acuan → Critical) + Inspection due_date<acuan & actual kosong (overdue). Top 5.",
+         "thresholds": "target/due terlewat → Critical · selain itu Watch",
+         "note": "—"},
+        {"metric": "Reliability Readiness cards",
+         "source": "bad_actor_monitoring · icu_monitoring · zero_clamp · boc · inspection_plan",
+         "columns": "status, icu_status, mtbf, due_date/actual_date",
+         "formula": "Hitung: Bad Actor aktif, ICU high-severity, Zero Clamp aktif, jumlah BOC, Inspeksi overdue.",
+         "thresholds": "per kartu (mis. ICU: ada high → Critical)",
+         "note": "Kartu tanpa kolom yang dikenal tetap memakai nilai contoh."},
+        {"metric": "Data Freshness",
+         "source": "semua tabel sumber",
+         "columns": "COUNT(*) + kolom tanggal (month_update/periode/date)",
+         "formula": "Jumlah record + tanggal update terbaru per tabel.",
+         "thresholds": "ada data → Current · kosong → No data",
+         "note": "Menunjukkan kesegaran & kelengkapan sumber."},
+        {"metric": "Overall RU status",
+         "source": "turunan",
+         "columns": "plo_status, spend_status, paf, program, alerts",
+         "formula": "Skor = maksimum dari sinyal (PLO/Spend critical=2/watch=1; PAF<88 atau Program<65 =2, <94/<80 =1; Alerts≥4=2, ≥2=1). 2=Critical, 1=Watch, 0=Healthy.",
+         "thresholds": "0 Healthy · 1 Watch · 2 Critical",
+         "note": "Menentukan warna marker peta & badge scorecard."},
+        {"metric": "Periode (tanggal-acuan)",
+         "source": "selector periode",
+         "columns": "—",
+         "formula": "Bulan (mis. 'Jun 2026') → akhir bulan sebagai tanggal-acuan. 'YTD 2026' → hari ini / akhir tahun. Dipakai untuk bucket expiry & overdue.",
+         "thresholds": "—",
+         "note": "Mengubah periode mengubah PLO/overdue/severity."},
+    ]
+
+
+def _detect_column(conn, table, needles):
+    if not _table_exists(conn, table):
+        return "❓ tabel tidak ada"
+    col = _pick(_columns(conn, table), *needles)
+    return col or "❓ tidak terdeteksi"
+
+
+def methodology(period: str = "") -> dict:
+    label, as_of, _ = period_asof(period)
+    entries = _methodology_entries()
+    detected = {}
+    if _get_conn is not None:
+        try:
+            with _get_conn() as conn:
+                for e in entries:
+                    if "detect" in e:
+                        t, needles = e["detect"]
+                        e["columns"] = f"{_detect_column(conn, t, needles)} (terdeteksi)"
+                    elif "detect2" in e:
+                        t, tn, an = e["detect2"]
+                        tc = _detect_column(conn, t, tn)
+                        ac = _detect_column(conn, t, an)
+                        e["columns"] = f"target={tc}, aktual={ac} (terdeteksi)"
+                    detected["_db"] = "connected"
+        except Exception as ex:
+            detected["_db"] = f"tidak konek: {ex!r}"
+    else:
+        detected["_db"] = "db_equipment tidak ter-import"
+    for e in entries:
+        e.pop("detect", None)
+        e.pop("detect2", None)
+    return {"as_of": as_of.isoformat(), "period": label or "latest",
+            "db": detected.get("_db", "unknown"), "entries": entries}
+
+
 # ─── diagnostics ──────────────────────────────────────────────────────────────
 def diagnostics(period: str = "") -> dict:
     out = {"db": "unknown", "period": period, "tables": {}, "sections": {}}
