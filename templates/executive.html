@@ -56,6 +56,7 @@
     <button class="ex-tab" data-tab="alerts" onclick="exShowTab('alerts', this)">△ Critical Alerts</button>
     <button class="ex-tab" data-tab="readiness" onclick="exShowTab('readiness', this)">☑ Reliability Readiness</button>
     <button class="ex-tab" data-tab="freshness" onclick="exShowTab('freshness', this)">🗄 Data Freshness</button>
+    <button class="ex-tab" data-tab="methodology" onclick="exShowTab('methodology', this)">📖 Metodologi</button>
   </nav>
 
   {# ══════════ TAB A: Corporate Overview ══════════ #}
@@ -236,6 +237,60 @@
         </table>
       </div>
       <div class="ex-fresh-note">⚠ Stale: data older than 36 hours or completeness below 90%. Wire the 28 source tables to replace mock values.</div>
+    </div>
+  </section>
+
+  {# ══════════ TAB F: Metodologi (transparency) ══════════ #}
+  <section class="ex-panel hidden" data-panel="methodology">
+    <div class="ex-card" style="margin-bottom:12px;">
+      <div class="ex-card-title">📖 Metodologi &amp; Sumber Data</div>
+      <p style="color:var(--ex-text2); font-size:12px; line-height:1.7;">
+        Halaman ini menjelaskan <b>dari mana</b> tiap angka diambil dan <b>bagaimana</b>
+        dihitung, agar hasil di dashboard transparan dan bisa divalidasi.
+        Kolom <b>"Kolom dipakai"</b> menampilkan nama kolom asli yang
+        <b>benar-benar terdeteksi</b> dari database
+        {% if methodology.period %}(periode <b>{{ methodology.period }}</b>, tanggal-acuan <b>{{ methodology.as_of }}</b>){% endif %}.
+        Jika tertulis <span class="ex-num-critical">❓ tidak terdeteksi</span>, bagian itu
+        memakai nilai contoh (mock) sampai kolomnya dikonfirmasi.
+      </p>
+      <div style="font-size:11px; color:var(--ex-text3); margin-top:6px;">
+        Status koneksi DB: <b>{{ methodology.db }}</b>
+      </div>
+    </div>
+
+    <div class="ex-card">
+      <div class="ex-table-wrap">
+        <table class="ex-table ex-method-table">
+          <thead><tr>
+            <th style="width:16%;">Metrik</th>
+            <th style="width:16%;">Sumber (tabel)</th>
+            <th style="width:16%;">Kolom dipakai</th>
+            <th style="width:26%;">Rumus / Agregasi</th>
+            <th style="width:14%;">Threshold status</th>
+            <th style="width:12%;">Catatan</th>
+          </tr></thead>
+          <tbody>
+            {% for e in methodology.entries %}
+            <tr>
+              <td class="ex-row-name">{{ e.metric }}</td>
+              <td><code class="ex-code">{{ e.source }}</code></td>
+              <td>
+                {% if '❓' in e.columns %}<span class="ex-num-critical">{{ e.columns }}</span>
+                {% else %}<code class="ex-code">{{ e.columns }}</code>{% endif %}
+              </td>
+              <td style="font-size:11px; line-height:1.5;">{{ e.formula }}</td>
+              <td style="font-size:10.5px;">{{ e.thresholds }}</td>
+              <td style="font-size:10px; color:var(--ex-text3);">{{ e.note }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="ex-fresh-note" style="color:var(--ex-text3);">
+        Prinsip fallback: setiap metrik yang tabel/kolomnya tak ditemukan atau kosong otomatis
+        memakai nilai contoh (mock), dan label di header berubah jadi <b>Partial / Mockup</b>.
+        Robust terhadap format tanggal (dd/mm/yyyy) &amp; angka (koma desimal, titik ribuan).
+      </div>
     </div>
   </section>
 
