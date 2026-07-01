@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
 import db
+import executive_mock
 from embedder import get_embedding, get_embeddings_batch
 from processor import dispatch, SUPPORTED_TYPES
 
@@ -40,6 +41,22 @@ async def page_dashboard(request: Request):
     return templates.TemplateResponse(request, "index.html", {
         "stats": stats,
         "title": "Dashboard"
+    })
+
+@app.get("/dashboard/executive", response_class=HTMLResponse)
+async def page_executive(request: Request):
+    # MOCKUP: swap executive_mock.get_executive_snapshot() for a live snapshot
+    # API/DB call later — the template consumes the same dict shape.
+    return templates.TemplateResponse(request, "executive.html", {
+        "snapshot": executive_mock.get_executive_snapshot(),
+        "title": "Executive Dashboard"
+    })
+
+@app.get("/dashboard/drilldown", response_class=HTMLResponse)
+async def page_drilldown(request: Request, ru: str = ""):
+    return templates.TemplateResponse(request, "drilldown.html", {
+        "ru": ru,
+        "title": "Refinery Drill-down"
     })
 
 @app.get("/upload", response_class=HTMLResponse)

@@ -23,6 +23,12 @@
     </button>
   </div>
   <nav class="sidebar-nav">
+    <div class="nav-group-label">Reliability</div>
+    <a href="/dashboard/executive" class="nav-item gov-item {% if title == 'Executive Dashboard' %}active{% endif %}" onclick="closeSidebar()" title="Overview Kilang">
+      <svg viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M4 20V9l5 3V9l5 3V9l5 3v8"/><line x1="8" y1="20" x2="8" y2="16"/><line x1="16" y1="20" x2="16" y2="16"/></svg>
+      <span>Overview Kilang</span>
+    </a>
+
     <div class="nav-group-label">Governance</div>
     <a href="/governance" class="nav-item gov-item {% if title == 'Data Governance' %}active{% endif %}" onclick="closeSidebar()" title="Overview">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>

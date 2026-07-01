@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% from "_exec_components.html" import status_badge, status_dot, trend_indicator, drilldown_link,
+   kpi_card, refinery_marker, scorecard_row, issue_item, interpretation_note, readiness_card, freshness_row %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/executive.css"/>
+{% endblock %}
+
+{% block content %}
+{% set m = snapshot.meta %}
+{% set k = snapshot.kpis %}
+<div class="exec-dash">
+
+  {# ─────────── Executive Header ─────────── #}
+  <header class="ex-header">
+    <div class="ex-brand">
+      <div class="ex-brand-mark">▲</div>
+      <div class="ex-brand-text">
+        <div class="ex-brand-name">PERTAMINA</div>
+        <div class="ex-brand-sub">RELIABILITY MACHINE · MS-AI AGENT</div>
+      </div>
+    </div>
+    <div class="ex-header-main">
+      <h1 class="ex-title">Refinery Reliability Executive Dashboard</h1>
+      <p class="ex-subtitle">Strategic monitoring for Operational Availability, PAF, Program, Spend &amp; Compliance</p>
+    </div>
+    <div class="ex-header-controls">
+      <div class="ex-period">
+        <select class="ex-select" id="ex-period">
+          <option>{{ m.period }}</option>
+          <option>May 2026</option>
+          <option>Apr 2026</option>
+          <option>YTD 2026</option>
+        </select>
+      </div>
+      <div class="ex-snapshot">
+        <div class="ex-snapshot-label">Last snapshot</div>
+        <div class="ex-snapshot-val">{{ m.last_snapshot }}</div>
+      </div>
+      <div class="ex-freshness ex-badge-{{ m.freshness_status }}">
+        {{ status_dot(m.freshness_status) }} Data freshness {{ m.freshness_pct }}% current
+      </div>
+      <button class="ex-refresh" id="ex-refresh" onclick="exRefreshSnapshot(this)">⟳ Refresh Snapshot</button>
+    </div>
+  </header>
+
+  <div class="ex-mocklabel">{{ m.mock_label }}</div>
+
+  {# ─────────── Tabs ─────────── #}
+  <nav class="ex-tabs">
+    <button class="ex-tab active" data-tab="overview" onclick="exShowTab('overview', this)">◎ Corporate Overview</button>
+    <button class="ex-tab" data-tab="ru" onclick="exShowTab('ru', this)">🏭 Refinery Unit Overview</button>
+    <button class="ex-tab" data-tab="alerts" onclick="exShowTab('alerts', this)">△ Critical Alerts</button>
+    <button class="ex-tab" data-tab="readiness" onclick="exShowTab('readiness', this)">☑ Reliability Readiness</button>
+    <button class="ex-tab" data-tab="freshness" onclick="exShowTab('freshness', this)">🗄 Data Freshness</button>
+  </nav>
+
+  {# ══════════ TAB A: Corporate Overview ══════════ #}
+  <section class="ex-panel" data-panel="overview">
+
+    {# KPI strip #}
+    <div class="ex-kpi-strip">
+      {% call kpi_card('◎', k.oa.label, k.oa.sub, k.oa.status, 'Watch' if k.oa.status=='watch' else k.oa.status|capitalize) %}
+        <div class="ex-kpi-big ex-num-{{ k.oa.status }}">{{ k.oa.value }}%</div>
+        <div class="ex-kpi-grid">
+          <div><span class="ex-kpi-lbl">Target</span><b>{{ k.oa.target }}%</b></div>
+          <div><span class="ex-kpi-lbl">Actual</span><b>{{ k.oa.actual }}%</b></div>
+          <div><span class="ex-kpi-lbl">Trend</span>{{ trend_indicator(k.oa.trend) }}</div>
+        </div>
+      {% endcall %}
+
+      {% call kpi_card('📈', k.paf.label, k.paf.sub, k.paf.status, 'Watch' if k.paf.status=='watch' else k.paf.status|capitalize) %}
+        <div class="ex-kpi-big ex-num-{{ k.paf.status }}">{{ k.paf.value }}%</div>
+        <div class="ex-kpi-grid">
+          <div><span class="ex-kpi-lbl">Target</span><b>{{ k.paf.target }}%</b></div>
+          <div><span class="ex-kpi-lbl">Realization</span><b>{{ k.paf.realization }}%</b></div>
+          <div><span class="ex-kpi-lbl">Trend</span>{{ trend_indicator(k.paf.trend) }}</div>
+        </div>
+      {% endcall %}
+
+      {% call kpi_card('▤', k.rkap.label, k.rkap.sub, k.rkap.status, k.rkap.status|capitalize) %}
+        <div class="ex-kpi-big ex-num-{{ k.rkap.status }}">{{ k.rkap.value }}%</div>
+        <div class="ex-kpi-lines">
+          <div>{{ k.rkap.completed }} / {{ k.rkap.total }} critical programs</div>
+          <div class="ex-num-critical">{{ k.rkap.overdue }} overdue</div>
+        </div>
+      {% endcall %}
+
+      {% call kpi_card('$', k.spend.label, k.spend.sub, k.spend.status, k.spend.status|capitalize) %}
+        <div class="ex-kpi-mid">Rp {{ k.spend.actual_t }}T <span class="ex-kpi-of">/ Rp {{ k.spend.plan_t }}</span></div>
+        <div class="ex-kpi-lines">
+          <div>{{ k.spend.pct_of_plan }}% of plan</div>
+          <div>{{ status_badge('healthy', k.spend.interpretation) }}</div>
+        </div>
+      {% endcall %}
+
+      {% call kpi_card('⛨', k.plo.label, k.plo.sub, k.plo.status, 'Attention' if k.plo.status=='critical' else k.plo.status|capitalize) %}
+        <div class="ex-kpi-mid ex-num-critical">{{ k.plo.active }} <span class="ex-kpi-of">active</span></div>
+        <div class="ex-kpi-grid ex-kpi-grid-2">
+          <div><b>{{ k.plo.exp_90 }}</b><span class="ex-kpi-lbl">expiring 90d</span></div>
+          <div><b>{{ k.plo.exp_30 }}</b><span class="ex-kpi-lbl">expiring 30d</span></div>
+          <div><b class="ex-num-critical">{{ k.plo.expired }}</b><span class="ex-kpi-lbl">expired</span></div>
+        </div>
+      {% endcall %}
+    </div>
+
+    {# Map + Scorecard #}
+    <div class="ex-mainrow">
+      <div class="ex-card ex-map-card">
+        <div class="ex-card-title">Indonesia Refinery Map</div>
+        {% include "_exec_map.html" %}
+      </div>
+
+      <div class="ex-card ex-score-card">
+        <div class="ex-card-title">RU Strategic Scorecard</div>
+        <div class="ex-table-wrap">
+          <table class="ex-table">
+            <thead>
+              <tr>
+                <th>RU</th><th>Cap. Util</th><th>OA</th><th>PAF</th>
+                <th>Program</th><th>Maint. Spend</th><th>PLO / Cert</th>
+                <th>Alerts</th><th>Overall</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ru in snapshot.refineries %}{{ scorecard_row(ru) }}{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# Highlight issue panels #}
+    <div class="ex-issuerow">
+      <div class="ex-card">
+        <div class="ex-card-title"><span class="ex-panel-tag">A</span> Regulatory Watchlist</div>
+        {% for it in snapshot.issues.regulatory[:4] %}{{ issue_item(it) }}{% endfor %}
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title"><span class="ex-panel-tag">B</span> Reliability Hotspots</div>
+        {% for it in snapshot.issues.reliability[:4] %}{{ issue_item(it) }}{% endfor %}
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title"><span class="ex-panel-tag">C</span> Program Execution Watchlist</div>
+        {% for it in snapshot.issues.program[:4] %}{{ issue_item(it) }}{% endfor %}
+      </div>
+    </div>
+
+    {# Interpretation + Data Freshness #}
+    <div class="ex-botrow">
+      <div class="ex-card">
+        <div class="ex-card-title">☆ Executive Interpretation</div>
+        <ul class="ex-notes">
+          {% for note in snapshot.interpretation %}{{ interpretation_note(note) }}{% endfor %}
+        </ul>
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title">🗄 Data Freshness Summary</div>
+        <div class="ex-table-wrap">
+          <table class="ex-table ex-table-fresh">
+            <thead><tr><th>Source Dataset</th><th>Latest Update</th><th>Records</th><th>Completeness</th><th>Status</th></tr></thead>
+            <tbody>{% for src in snapshot.data_freshness %}{{ freshness_row(src) }}{% endfor %}</tbody>
+          </table>
+        </div>
+        <div class="ex-fresh-note">⚠ Stale: data older than 36 hours or completeness below 90%.</div>
+      </div>
+    </div>
+  </section>
+
+  {# ══════════ TAB B: Refinery Unit Overview ══════════ #}
+  <section class="ex-panel hidden" data-panel="ru">
+    <div class="ex-ru-grid">
+      {% for ru in snapshot.refineries %}
+      <div class="ex-card ex-ru-card ex-accent-{{ ru.status }}">
+        <div class="ex-ru-head">
+          <div class="ex-ru-name">{{ status_dot(ru.status) }} {{ ru.name }}</div>
+          {{ status_badge(ru.status, ru.status|capitalize) }}
+        </div>
+        <div class="ex-ru-cap">{{ ru.current }} / {{ ru.design }} MBSD · {{ ru.util }}% util</div>
+        <div class="ex-ru-metrics">
+          <div class="ex-mini"><span>OA</span><b class="ex-num-{{ 'healthy' if ru.oa>=95 else 'watch' if ru.oa>=90 else 'critical' }}">{{ ru.oa }}%</b></div>
+          <div class="ex-mini"><span>PAF</span><b class="ex-num-{{ 'healthy' if ru.paf>=94 else 'watch' if ru.paf>=88 else 'critical' }}">{{ ru.paf }}%</b></div>
+          <div class="ex-mini"><span>Program</span><b class="ex-num-{{ 'healthy' if ru.program>=80 else 'watch' if ru.program>=65 else 'critical' }}">{{ ru.program }}%</b></div>
+          <div class="ex-mini"><span>Alerts</span><b>{{ ru.alerts }}</b></div>
+        </div>
+        <div class="ex-ru-foot">
+          <span>Spend: {{ status_badge(ru.spend_status, ru.spend) }}</span>
+          <span>PLO: {{ status_badge(ru.plo_status, ru.plo) }}</span>
+        </div>
+        <a class="ex-drill-btn" href="/dashboard/drilldown?ru={{ ru.code }}">Drill down →</a>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ══════════ TAB C: Critical Alerts ══════════ #}
+  <section class="ex-panel hidden" data-panel="alerts">
+    <div class="ex-alert-grid">
+      <div class="ex-card">
+        <div class="ex-card-title">Regulatory</div>
+        {% for it in snapshot.alerts.regulatory %}{{ issue_item(it) }}{% endfor %}
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title">Operational Reliability</div>
+        {% for it in snapshot.alerts.operational %}{{ issue_item(it) }}{% endfor %}
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title">Program Execution</div>
+        {% for it in snapshot.alerts.program %}{{ issue_item(it) }}{% endfor %}
+      </div>
+      <div class="ex-card">
+        <div class="ex-card-title">Data Quality</div>
+        {% for it in snapshot.alerts.data %}{{ issue_item(it) }}{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  {# ══════════ TAB D: Reliability Readiness ══════════ #}
+  <section class="ex-panel hidden" data-panel="readiness">
+    <div class="ex-ready-grid">
+      {% for card in snapshot.readiness %}{{ readiness_card(card) }}{% endfor %}
+    </div>
+  </section>
+
+  {# ══════════ TAB E: Data Freshness ══════════ #}
+  <section class="ex-panel hidden" data-panel="freshness">
+    <div class="ex-card">
+      <div class="ex-card-title">Source Dataset Freshness</div>
+      <div class="ex-table-wrap">
+        <table class="ex-table ex-table-fresh">
+          <thead><tr><th>Source Dataset</th><th>Latest Update</th><th>Records</th><th>Completeness</th><th>Status</th></tr></thead>
+          <tbody>{% for src in snapshot.data_freshness %}{{ freshness_row(src) }}{% endfor %}</tbody>
+        </table>
+      </div>
+      <div class="ex-fresh-note">⚠ Stale: data older than 36 hours or completeness below 90%. Wire the 28 source tables to replace mock values.</div>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/executive.js"></script>
+{% endblock %}

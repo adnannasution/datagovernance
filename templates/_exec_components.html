@@ -1,0 +1,130 @@
+{# ═══════════════════════════════════════════════════════════════════════════
+   Reusable executive-dashboard components (Jinja2 macros).
+   Status tokens: healthy | watch | critical | nodata
+   ═══════════════════════════════════════════════════════════════════════════ #}
+
+{% macro status_badge(status, label) -%}
+  <span class="ex-badge ex-badge-{{ status }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro status_dot(status) -%}
+  <span class="ex-dot ex-dot-{{ status }}"></span>
+{%- endmacro %}
+
+{% macro trend_indicator(value) -%}
+  {% if value > 0 %}
+    <span class="ex-trend ex-trend-up">▲ +{{ value }}</span>
+  {% elif value < 0 %}
+    <span class="ex-trend ex-trend-down">▼ {{ value }}</span>
+  {% else %}
+    <span class="ex-trend ex-trend-flat">■ {{ value }}</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro drilldown_link(code) -%}
+  <a class="ex-drill" href="/dashboard/drilldown?ru={{ code }}" title="Drill down">›</a>
+{%- endmacro %}
+
+{# ── KPI card (body provided via {% call %}) ── #}
+{% macro kpi_card(icon, title, sub, status, status_label) -%}
+  <div class="ex-kpi ex-accent-{{ status }}">
+    <div class="ex-kpi-head">
+      <div class="ex-kpi-icon">{{ icon }}</div>
+      <div class="ex-kpi-titles">
+        <div class="ex-kpi-title">{{ title }}</div>
+        {% if sub %}<div class="ex-kpi-sub">{{ sub }}</div>{% endif %}
+      </div>
+      <div class="ex-kpi-status">
+        <div class="ex-kpi-status-label">Status</div>
+        {{ status_badge(status, status_label) }}
+      </div>
+    </div>
+    <div class="ex-kpi-body">{{ caller() }}</div>
+  </div>
+{%- endmacro %}
+
+{# ── Map marker ── #}
+{% macro refinery_marker(ru) -%}
+  <div class="ex-marker ex-marker-{{ ru.status }}"
+       style="left:{{ ru.map_x }}%; top:{{ ru.map_y }}%;"
+       data-code="{{ ru.code }}"
+       onclick="location.href='/dashboard/drilldown?ru={{ ru.code }}'">
+    <span class="ex-marker-pin"></span>
+    <div class="ex-marker-card">
+      <div class="ex-marker-name">{{ status_dot(ru.status) }} {{ ru.name }}</div>
+      <div class="ex-marker-cap">{{ ru.current }} / {{ ru.design }} MBSD</div>
+      <div class="ex-marker-cap">{{ ru.util }}% util</div>
+      <div class="ex-marker-meta">OA {{ ru.oa }}% | PAF {{ ru.paf }}%</div>
+      <div class="ex-marker-alerts ex-badge-{{ ru.status }}">Alerts: {{ ru.alerts }}</div>
+    </div>
+  </div>
+{%- endmacro %}
+
+{# ── Scorecard row ── #}
+{% macro scorecard_row(ru) -%}
+  <tr class="ex-row" onclick="location.href='/dashboard/drilldown?ru={{ ru.code }}'">
+    <td class="ex-row-name">{{ ru.name }}</td>
+    <td>{{ ru.util }}%</td>
+    <td class="ex-num-{{ 'healthy' if ru.oa >= 95 else 'watch' if ru.oa >= 90 else 'critical' }}">{{ ru.oa }}%</td>
+    <td class="ex-num-{{ 'healthy' if ru.paf >= 94 else 'watch' if ru.paf >= 88 else 'critical' }}">{{ ru.paf }}%</td>
+    <td class="ex-num-{{ 'healthy' if ru.program >= 80 else 'watch' if ru.program >= 65 else 'critical' }}">{{ ru.program }}%</td>
+    <td>{{ status_badge(ru.spend_status, ru.spend) }}</td>
+    <td>{{ status_badge(ru.plo_status, ru.plo) }}</td>
+    <td class="ex-center">{{ ru.alerts }}</td>
+    <td>{{ status_badge(ru.status, ru.status | capitalize) }}</td>
+    <td class="ex-center">{{ drilldown_link(ru.code) }}</td>
+  </tr>
+{%- endmacro %}
+
+{# ── Issue item ── #}
+{% macro issue_item(item) -%}
+  <div class="ex-issue">
+    <div class="ex-issue-ru">
+      <span class="ex-issue-rucode">{{ item.ru }}</span>
+      {{ status_badge(item.severity, item.severity | capitalize) }}
+    </div>
+    <div class="ex-issue-main">
+      <div class="ex-issue-title">{{ item.title }}</div>
+      <div class="ex-issue-impact">{{ item.impact }} · <em>{{ item.action }}</em></div>
+    </div>
+    <div class="ex-issue-side">
+      <div class="ex-issue-due ex-num-{{ item.severity }}">{{ item.aging }}</div>
+      <div class="ex-issue-owner">{{ item.owner }}</div>
+      <div class="ex-issue-src">{{ item.source }}</div>
+    </div>
+  </div>
+{%- endmacro %}
+
+{# ── Interpretation note ── #}
+{% macro interpretation_note(text) -%}
+  <li class="ex-note">{{ text }}</li>
+{%- endmacro %}
+
+{# ── Readiness card ── #}
+{% macro readiness_card(card) -%}
+  <div class="ex-ready ex-accent-{{ card.status }}">
+    <div class="ex-ready-head">
+      <span class="ex-ready-title">{{ card.title }}</span>
+      {{ status_dot(card.status) }}
+    </div>
+    <div class="ex-ready-primary">{{ card.primary }}</div>
+    <div class="ex-ready-detail">{{ card.detail }}</div>
+    <div class="ex-ready-src">{{ card.source }}</div>
+  </div>
+{%- endmacro %}
+
+{# ── Data freshness row ── #}
+{% macro freshness_row(src) -%}
+  <tr>
+    <td class="ex-row-name">{{ src.dataset }}</td>
+    <td>{{ src.updated }}</td>
+    <td class="ex-center">{{ src.records }}</td>
+    <td>
+      <div class="ex-comp">
+        <div class="ex-comp-track"><div class="ex-comp-fill ex-fill-{{ src.status }}" style="width:{{ src.completeness }}%"></div></div>
+        <span class="ex-comp-pct">{{ src.completeness }}%</span>
+      </div>
+    </td>
+    <td>{{ status_dot(src.status) }} {{ 'Current' if src.status == 'healthy' else 'Watch' if src.status == 'watch' else 'Stale' }}</td>
+  </tr>
+{%- endmacro %}
