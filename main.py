@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 import db
 import executive_mock
+import executive_data
 from embedder import get_embedding, get_embeddings_batch
 from processor import dispatch, SUPPORTED_TYPES
 
@@ -45,10 +46,15 @@ async def page_dashboard(request: Request):
 
 @app.get("/dashboard/executive", response_class=HTMLResponse)
 async def page_executive(request: Request):
-    # MOCKUP: swap executive_mock.get_executive_snapshot() for a live snapshot
-    # API/DB call later — the template consumes the same dict shape.
+    # Live data from the reliability tables (executive_data), with automatic
+    # per-section fallback to the mock skeleton (executive_mock) when the DB or
+    # a specific column is unavailable. Same dict shape either way.
+    try:
+        snapshot = executive_data.get_executive_snapshot()
+    except Exception:
+        snapshot = executive_mock.get_executive_snapshot()
     return templates.TemplateResponse(request, "executive.html", {
-        "snapshot": executive_mock.get_executive_snapshot(),
+        "snapshot": snapshot,
         "title": "Executive Dashboard"
     })
 
