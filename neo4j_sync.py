@@ -1035,25 +1035,42 @@ def full_resync() -> dict:
 
 def reset_all_neo4j(batch_size: int = 5000) -> dict:
     """
-    Hapus SEMUA node dan relasi di Neo4j dalam batch kecil agar tidak OOM.
-    Setiap iterasi hanya hapus batch_size node sehingga transaksi tetap ringan.
+    Hapus SEMUA node dan relasi di Neo4j tanpa OOM.
+    Fase 1: hapus semua relasi dulu dalam batch (DELETE r, bukan DETACH).
+    Fase 2: hapus semua node dalam batch (DELETE n, tidak perlu DETACH karena relasi sudah kosong).
+    Pemisahan ini jauh lebih ringan di memori dibanding DETACH DELETE langsung.
     """
-    total_deleted = 0
+    total_rel = 0
+    total_node = 0
     try:
         with get_driver() as driver:
+            # Fase 1: hapus semua relasi
             while True:
                 with driver.session() as session:
                     result = session.run(
-                        f"MATCH (n) WITH n LIMIT {batch_size} DETACH DELETE n RETURN count(n) AS deleted"
+                        f"MATCH ()-[r]->() WITH r LIMIT {batch_size} DELETE r RETURN count(r) AS deleted"
                     )
                     row = result.single()
                     batch = row["deleted"] if row else 0
-                    total_deleted += batch
+                    total_rel += batch
                     if batch == 0:
                         break
-        return {"success": True, "deleted": total_deleted}
+
+            # Fase 2: hapus semua node (relasi sudah kosong, tidak butuh DETACH)
+            while True:
+                with driver.session() as session:
+                    result = session.run(
+                        f"MATCH (n) WITH n LIMIT {batch_size} DELETE n RETURN count(n) AS deleted"
+                    )
+                    row = result.single()
+                    batch = row["deleted"] if row else 0
+                    total_node += batch
+                    if batch == 0:
+                        break
+
+        return {"success": True, "deleted": total_node, "relations_deleted": total_rel}
     except Exception as e:
-        return {"success": False, "error": str(e), "deleted": total_deleted}
+        return {"success": False, "error": str(e), "deleted": total_node, "relations_deleted": total_rel}
 
 
 def reset_all_and_resync() -> dict:
