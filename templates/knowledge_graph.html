@@ -1146,28 +1146,40 @@ let domainRelInterval = null;
 
 async function resetRelations(btn) {
   if (!confirm('Yakin hapus semua relasi di Neo4j? Node tetap ada, hanya relasi yang dihapus.')) return;
+  await requestNotifPermission();
   const statusEl = document.getElementById('reset-rel-status');
   btn.disabled = true;
   btn.textContent = 'Menghapus...';
   statusEl.style.display = 'block';
   statusEl.style.color = 'var(--text2)';
-  statusEl.textContent = 'Menghapus semua relasi...';
+  statusEl.textContent = 'Menghapus semua relasi di background... Tab boleh ditutup, notifikasi akan muncul saat selesai.';
   try {
     const res = await fetch('/api/neo4j/reset-relations', { method: 'POST' });
     const data = await res.json();
-    if (data.success) {
-      statusEl.style.color = 'var(--success)';
-      statusEl.textContent = `✅ Berhasil hapus ${data.deleted.toLocaleString()} relasi. Silakan generate kandidat lalu sync ulang.`;
-    } else {
+    if (!data.success) {
       statusEl.style.color = 'var(--danger)';
       statusEl.textContent = `❌ Gagal: ${data.error}`;
+      btn.disabled = false;
+      btn.textContent = 'Reset Relasi';
+      return;
     }
+    pollUntilDone('/api/neo4j/reset-relations/status', statusEl, btn, 'Reset Relasi', (result) => {
+      if (result && result.success) {
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `✅ Selesai! ${result.deleted?.toLocaleString() ?? 0} relasi dihapus. Silakan generate kandidat lalu sync ulang.`;
+        sendBrowserNotif('Reset Relasi Selesai', `${result.deleted?.toLocaleString() ?? 0} relasi Neo4j telah dihapus.`);
+      } else {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.textContent = `❌ Gagal: ${result?.error ?? 'Unknown error'}`;
+        sendBrowserNotif('Reset Relasi Gagal', result?.error ?? 'Terjadi kesalahan.');
+      }
+    });
   } catch(e) {
     statusEl.style.color = 'var(--danger)';
     statusEl.textContent = `❌ Error: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Reset Relasi';
   }
-  btn.disabled = false;
-  btn.textContent = 'Reset Relasi';
 }
 
 async function fullResync(btn) {
