@@ -971,12 +971,12 @@ NODE: Equipment  [tag: e.tag_number — SELALU gunakan e.tag_number bukan e.equi
   location, criticality (A=sangat kritis, B=kritis, C=kurang kritis, Z=tidak kritis),
   equipment_category, technical_obj_type, manufacturer, model_type, material
 
-NODE: BadActor  [tag: ba.tag_number]
-  tag_number, ru, status, problem, action_plan, progress,
+NODE: BadActor  [tag: ba.equipment]
+  equipment, ru, status, problem, action_plan, progress,
   target_date, periode, action_plan_category, no_irkap
 
-NODE: ICUMonitoring  [tag: icu.tag_no]
-  tag_no, ru, icu_status (contoh: "ICU", "Non-ICU", "Closed"),
+NODE: ICUMonitoring  [tag: icu.equipment]
+  equipment, ru, icu_status (contoh: "ICU", "Non-ICU", "Closed"),
   issue, mitigation, mitigasi_category, permanent_solution,
   solution_category, progress, target_closed, report_date
 
@@ -995,53 +995,53 @@ NODE: BOC  [tag: b.equipment]
   frequency, running_hours, mttr, mtbf,
   hasil (N+0=tidak ada standby KRITIS, N+1=ada 1 standby, N+2=ada 2 standby, Single=tunggal tanpa grup)
 
-NODE: IRKAPProgram  [tag: ip.equipment_tag_no]
-  equipment_tag_no, refinery_unit, disiplin, kategori_rkap,
+NODE: IRKAPProgram  [tag: ip.equipment]
+  equipment, refinery_unit, disiplin, kategori_rkap,
   no_program_kerja, type_equipment, program_kerja,
   status_step, status_prognosa, start_plan, finish_plan,
   nilai_anggaran_idr, nilai_anggaran_usd, top_risk, asset_integrity
 
-NODE: IRKAPActual  [tag: ia.tag_no]
-  tag_no, no_program, kategori_rkap, program_kerja, refinery_unit,
+NODE: IRKAPActual  [tag: ia.equipment]
+  equipment, no_program, kategori_rkap, program_kerja, refinery_unit,
   area, disiplin, status_step, status_prognosa, current_step,
   notif_no, wo_no, pr, po, anggaran_idr, jadwal_pelaksanaan,
   actual_start1, actual_finish1, failure_impact, rekomendasi
 
-NODE: ATGMonitoring  [tag: atg.tag_no_tangki]
-  tag_no_tangki, tag_no_atg, refinery_unit,
+NODE: ATGMonitoring  [tag: atg.equipment_tangki]
+  equipment_tangki, equipment_atg, refinery_unit,
   status_atg, status_interkoneksi_atg,
   cert_no_atg, date_expired_atg, remark, rtl, action_plan_category,
   status_rtl, month_update
 
-NODE: MeteringMonitor  [tag: m.tag_number]
-  tag_number, refinery_unit, status_metering,
+NODE: MeteringMonitor  [tag: m.equipment]
+  equipment, refinery_unit, status_metering,
   cert_no_metering, date_expired_metering, remark,
   rtl, action_plan_category, status_rtl, month_update
 
-NODE: PipelineInspection  [tag: pi.tag_number]
-  tag_number, refinery_unit, area, unit, fluida_service, nps,
+NODE: PipelineInspection  [tag: pi.equipment]
+  equipment, refinery_unit, area, unit, fluida_service, nps,
   from_location, to_location, last_inspection_date, next_inspection_date,
   last_measured_thickness, rem_life_years, jumlah_temporary_repair, remarks
 
-NODE: InspectionPlan  [tag: insp.tag_no_ln]
-  tag_no_ln, refinery_unit, area, unit, type_equipment, type_inspection,
+NODE: InspectionPlan  [tag: insp.equipment]
+  equipment, refinery_unit, area, unit, type_equipment, type_inspection,
   type_pekerjaan, due_date, plan_date, actual_date,
   result_remaining_life, result_visual, grand_result
 
-NODE: ZeroClamp  [tag: zc.tag_no_ln]
-  tag_no_ln, ru, area, unit, services, description,
+NODE: ZeroClamp  [tag: zc.equipment]
+  equipment, ru, area, unit, services, description,
   type_damage, posisi, type_perbaikan,
   tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan,
   status, remarks, no_irkap
 
-NODE: ReadinessJetty / ReadinessTank / ReadinessSPM  [tag: r.tag_no / r.tag_number]
-  refinery_unit, area, unit, status_operation,
+NODE: ReadinessJetty / ReadinessTank / ReadinessSPM  [tag: r.equipment]
+  equipment, refinery_unit, area, unit, status_operation,
   status_laik_operasi, expired_laik_operasi, remark, month_update
   (ReadinessTank juga punya: type_tangki, service_tangki, prioritas,
    atg_certification_validity, status_coi, internal_inspection)
 
-NODE: WorkplanJetty / WorkplanTank / WorkplanSPM  [tag: wp.tag_no]
-  refinery_unit, area, unit, item, status_item,
+NODE: WorkplanJetty / WorkplanTank / WorkplanSPM  [tag: wp.equipment]
+  equipment, refinery_unit, area, unit, item, status_item,
   remark, rtl_action_plan, action_plan_category, target, status_rtl, month_update
 
 NODE: CriticalEquipment  [tag: crit.equipment]
