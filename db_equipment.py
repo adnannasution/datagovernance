@@ -26,13 +26,13 @@ TABLE_CATALOG = [
     {"table": "sap_work_orders",         "domain": "SAP",         "tag_col": "equipment",        "label": "SAP Work Orders"},
     {"table": "sap_bom",                 "domain": "SAP",         "tag_col": "equipment",        "label": "SAP BOM (Bill of Materials)"},
     # Monitoring
-    {"table": "bad_actor_monitoring",    "domain": "Monitoring",  "tag_col": "tag_number",       "label": "Bad Actor"},
-    {"table": "icu_monitoring",          "domain": "Monitoring",  "tag_col": "tag_no",           "label": "ICU Monitoring"},
-    {"table": "atg_monitoring",          "domain": "Monitoring",  "tag_col": "tag_no_tangki",    "label": "ATG Monitoring"},
-    {"table": "metering_monitoring",     "domain": "Monitoring",  "tag_col": "tag_number",       "label": "Metering"},
+    {"table": "bad_actor_monitoring",    "domain": "Monitoring",  "tag_col": "equipment",        "label": "Bad Actor"},
+    {"table": "icu_monitoring",          "domain": "Monitoring",  "tag_col": "equipment",        "label": "ICU Monitoring"},
+    {"table": "atg_monitoring",          "domain": "Monitoring",  "tag_col": "equipment_tangki", "label": "ATG Monitoring"},
+    {"table": "metering_monitoring",     "domain": "Monitoring",  "tag_col": "equipment",        "label": "Metering"},
     {"table": "boc",                     "domain": "Monitoring",  "tag_col": "equipment",        "label": "BOC"},
-    {"table": "pipeline_inspection",     "domain": "Monitoring",  "tag_col": "tag_number",       "label": "Pipeline Inspection"},
-    {"table": "zero_clamp",              "domain": "Monitoring",  "tag_col": "tag_no_ln",        "label": "Zero Clamp"},
+    {"table": "pipeline_inspection",     "domain": "Monitoring",  "tag_col": "equipment",        "label": "Pipeline Inspection"},
+    {"table": "zero_clamp",             "domain": "Monitoring",  "tag_col": "equipment",        "label": "Zero Clamp"},
     {"table": "power_stream",            "domain": "Monitoring",  "tag_col": "equipment",        "label": "Power & Stream"},
     {"table": "critical_eqp_prim_sec",   "domain": "Monitoring",  "tag_col": "equipment",        "label": "Critical Equipment"},
     {"table": "rotor_monitoring",        "domain": "Monitoring",  "tag_col": None,               "label": "Rotor Monitoring"},
@@ -44,18 +44,18 @@ TABLE_CATALOG = [
     {"table": "jumlah_eqp_utl",          "domain": "Operasi",     "tag_col": None,               "label": "Jumlah Equipment Utilitas"},
     {"table": "critical_eqp_utl",        "domain": "Operasi",     "tag_col": None,               "label": "Critical Equipment Utilitas"},
     # Inspection
-    {"table": "inspection_plan",         "domain": "Inspection",  "tag_col": "tag_no_ln",        "label": "Inspection Plan"},
+    {"table": "inspection_plan",         "domain": "Inspection",  "tag_col": "equipment",        "label": "Inspection Plan"},
     # Readiness
-    {"table": "readiness_jetty",         "domain": "Readiness",   "tag_col": "tag_no",           "label": "Readiness Jetty"},
-    {"table": "readiness_tank",          "domain": "Readiness",   "tag_col": "tag_number",       "label": "Readiness Tank"},
-    {"table": "readiness_spm",           "domain": "Readiness",   "tag_col": "tag_no",           "label": "Readiness SPM"},
+    {"table": "readiness_jetty",         "domain": "Readiness",   "tag_col": "equipment",        "label": "Readiness Jetty"},
+    {"table": "readiness_tank",          "domain": "Readiness",   "tag_col": "equipment",        "label": "Readiness Tank"},
+    {"table": "readiness_spm",           "domain": "Readiness",   "tag_col": "equipment",        "label": "Readiness SPM"},
     # Workplan
-    {"table": "workplan_jetty",          "domain": "Workplan",    "tag_col": "tag_no",           "label": "Workplan Jetty"},
-    {"table": "workplan_tank",           "domain": "Workplan",    "tag_col": "tag_no",           "label": "Workplan Tank"},
-    {"table": "spm_workplan",            "domain": "Workplan",    "tag_col": "tag_no",           "label": "Workplan SPM"},
+    {"table": "workplan_jetty",          "domain": "Workplan",    "tag_col": "equipment",        "label": "Workplan Jetty"},
+    {"table": "workplan_tank",           "domain": "Workplan",    "tag_col": "equipment",        "label": "Workplan Tank"},
+    {"table": "spm_workplan",            "domain": "Workplan",    "tag_col": "equipment",        "label": "Workplan SPM"},
     # IRKAP
-    {"table": "irkap_program",           "domain": "IRKAP",       "tag_col": "equipment_tag_no", "label": "IRKAP Program"},
-    {"table": "irkap_actual",            "domain": "IRKAP",       "tag_col": "tag_no",           "label": "IRKAP Actual"},
+    {"table": "irkap_program",           "domain": "IRKAP",       "tag_col": "equipment",        "label": "IRKAP Program"},
+    {"table": "irkap_actual",            "domain": "IRKAP",       "tag_col": "equipment",        "label": "IRKAP Actual"},
     # Keuangan
     {"table": "anggaran_maintenance",    "domain": "Keuangan",    "tag_col": None,               "label": "Anggaran Maintenance"},
     {"table": "tkdn",                    "domain": "Keuangan",    "tag_col": None,               "label": "TKDN"},
@@ -337,7 +337,7 @@ def get_bad_actor(tag, tags=None):
             SELECT ru, status, problem, action_plan, progress,
                    target_date, periode, action_plan_category,
                    external_resource, no_irkap, action_plan_remark
-            FROM bad_actor_monitoring WHERE tag_number IN ({ph})
+            FROM bad_actor_monitoring WHERE equipment IN ({ph})
             ORDER BY periode DESC NULLS LAST
         """, params).fetchall()
 
@@ -349,7 +349,7 @@ def get_icu(tag, tags=None):
                    permanent_solution, solution_category, progress,
                    target_closed, report_date, info,
                    remark_mitigation, remark_solution
-            FROM icu_monitoring WHERE tag_no IN ({ph})
+            FROM icu_monitoring WHERE equipment IN ({ph})
             ORDER BY report_date DESC NULLS LAST
         """, params).fetchall()
 
@@ -357,12 +357,12 @@ def get_atg(tag, tags=None):
     ph, params = _ph(tags or [tag])
     with get_conn() as conn:
         return conn.execute(f"""
-            SELECT refinery_unit, tag_no_tangki, tag_no_atg,
+            SELECT refinery_unit, equipment_tangki, equipment_atg,
                    status_atg, status_interkoneksi_atg,
                    cert_no_atg, date_expired_atg, remark,
                    rtl, action_plan_category, status_rtl, month_update
             FROM atg_monitoring
-            WHERE tag_no_tangki IN ({ph}) OR tag_no_atg IN ({ph})
+            WHERE equipment_tangki IN ({ph}) OR equipment_atg IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params + params).fetchall()
 
@@ -373,7 +373,7 @@ def get_metering(tag, tags=None):
             SELECT refinery_unit, status_metering, cert_no_metering,
                    date_expired_metering, remark, rtl,
                    action_plan_category, status_rtl, month_update
-            FROM metering_monitoring WHERE tag_number IN ({ph})
+            FROM metering_monitoring WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -395,7 +395,7 @@ def get_pipeline(tag, tags=None):
                    last_inspection_date, next_inspection_date,
                    last_measured_thickness, rem_life_years,
                    jumlah_temporary_repair, remarks, bulan, tahun
-            FROM pipeline_inspection WHERE tag_number IN ({ph})
+            FROM pipeline_inspection WHERE equipment IN ({ph})
             ORDER BY tahun DESC NULLS LAST, bulan DESC NULLS LAST
         """, params).fetchall()
 
@@ -408,7 +408,7 @@ def get_inspection_plan(tag, tags=None):
                    due_date, due_year, plan_date, plan_year,
                    actual_date, actual_year, update_date,
                    result_remaining_life, result_visual, grand_result
-            FROM inspection_plan WHERE tag_no_ln IN ({ph})
+            FROM inspection_plan WHERE equipment IN ({ph})
             ORDER BY due_year DESC NULLS LAST
         """, params).fetchall()
 
@@ -420,7 +420,7 @@ def get_zero_clamp(tag, tags=None):
                    type_damage, posisi, type_perbaikan,
                    tanggal_dipasang, tanggal_dilepas,
                    tanggal_rencana_perbaikan, status, remarks, no_irkap
-            FROM zero_clamp WHERE tag_no_ln IN ({ph})
+            FROM zero_clamp WHERE equipment IN ({ph})
             ORDER BY tanggal_dipasang DESC NULLS LAST
         """, params).fetchall()
 
@@ -433,7 +433,7 @@ def get_readiness_jetty(tag, tags=None):
                    status_isps, status_struktur, remark_struktur,
                    status_trestle, status_mla, status_fire_protection,
                    month_update
-            FROM readiness_jetty WHERE tag_no IN ({ph})
+            FROM readiness_jetty WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -446,7 +446,7 @@ def get_readiness_tank(tag, tags=None):
                    status_coi, internal_inspection, plan_internal_inspection,
                    status_atg, status_grounding, status_shell_course,
                    status_roof, status_cathodic, month_update
-            FROM readiness_tank WHERE tag_number IN ({ph})
+            FROM readiness_tank WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -459,7 +459,7 @@ def get_readiness_spm(tag, tags=None):
                    status_ijin_spl, status_mbc, status_lds,
                    status_mooring_hawser, status_floating_hose,
                    status_cathodic_spl, month_update
-            FROM readiness_spm WHERE tag_no IN ({ph})
+            FROM readiness_spm WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -470,7 +470,7 @@ def get_workplan_jetty(tag, tags=None):
             SELECT refinery_unit, area, unit, item, status_item,
                    remark, rtl_action_plan, action_plan_category,
                    target, status_rtl, month_update
-            FROM workplan_jetty WHERE tag_no IN ({ph})
+            FROM workplan_jetty WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -480,7 +480,7 @@ def get_workplan_tank(tag, tags=None):
         return conn.execute(f"""
             SELECT unit, item, remark, rtl_action_plan,
                    action_plan_category, target, status_rtl, month_update
-            FROM workplan_tank WHERE tag_no IN ({ph})
+            FROM workplan_tank WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -491,7 +491,7 @@ def get_workplan_spm(tag, tags=None):
             SELECT refinery_unit, area, unit, item, remark,
                    rtl_action_plan, action_plan_category,
                    target, status_rtl, month_update
-            FROM spm_workplan WHERE tag_no IN ({ph})
+            FROM spm_workplan WHERE equipment IN ({ph})
             ORDER BY month_update DESC NULLS LAST
         """, params).fetchall()
 
@@ -504,7 +504,7 @@ def get_irkap_program(tag, tags=None):
                    status_step, status_prognosa, start_plan, finish_plan,
                    nilai_anggaran_idr, nilai_anggaran_usd,
                    top_risk, asset_integrity
-            FROM irkap_program WHERE equipment_tag_no IN ({ph})
+            FROM irkap_program WHERE equipment IN ({ph})
             ORDER BY start_plan DESC NULLS LAST
         """, params).fetchall()
 
@@ -520,7 +520,7 @@ def get_irkap_actual(tag, tags=None):
                    actual_start1, actual_finish1,
                    actual_start3, actual_finish3,
                    failure_impact, rekomendasi
-            FROM irkap_actual WHERE tag_no IN ({ph})
+            FROM irkap_actual WHERE equipment IN ({ph})
             ORDER BY no DESC NULLS LAST
         """, params).fetchall()
 
