@@ -889,26 +889,47 @@ async def api_full_resync(background_tasks: BackgroundTasks):
     background_tasks.add_task(_run)
     return {"success": True, "message": "Full re-sync dimulai di background"}
 
+_reset_all_running = False
+_reset_all_result = None
+
 @app.post("/api/neo4j/reset-all")
 async def api_reset_all_neo4j(background_tasks: BackgroundTasks):
     from neo4j_sync import reset_all_neo4j
+    global _reset_all_running, _reset_all_result
+    if _reset_all_running:
+        return {"success": False, "error": "Reset sedang berjalan, tunggu selesai"}
+    _reset_all_running = True
+    _reset_all_result = None
     def _run():
-        reset_all_neo4j()
+        global _reset_all_running, _reset_all_result
+        try:
+            _reset_all_result = reset_all_neo4j()
+        finally:
+            _reset_all_running = False
     background_tasks.add_task(_run)
     return {"success": True, "message": "Reset semua node dan relasi Neo4j dimulai di background"}
+
+@app.get("/api/neo4j/reset-all/status")
+async def api_reset_all_status():
+    return {"running": _reset_all_running, "result": _reset_all_result}
 
 @app.post("/api/neo4j/reset-all-resync")
 async def api_reset_all_and_resync(background_tasks: BackgroundTasks):
     from neo4j_sync import reset_all_and_resync
-    global _table_sync_running
-    if _table_sync_running:
-        return {"success": False, "error": "Sync sedang berjalan, tunggu selesai"}
-    _table_sync_running = True
+    global _reset_all_running, _reset_all_result
+    if _reset_all_running:
+        return {"success": False, "error": "Reset sedang berjalan, tunggu selesai"}
+    _reset_all_running = True
+    _reset_all_result = None
     def _run():
-        global _table_sync_running, _last_table_sync_result
+        global _reset_all_running, _reset_all_result
         try:
-            _last_table_sync_result = reset_all_and_resync()
+            _reset_all_result = reset_all_and_resync()
         finally:
-            _table_sync_running = False
+            _reset_all_running = False
     background_tasks.add_task(_run)
     return {"success": True, "message": "Reset total + re-sync dimulai di background"}
+
+@app.get("/api/neo4j/reset-all-resync/status")
+async def api_reset_all_resync_status():
+    return {"running": _reset_all_running, "result": _reset_all_result}
