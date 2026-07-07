@@ -388,12 +388,13 @@ FORMAT RU BERBEDA antara tabel NON-SAP dan tabel SAP:
       Format mungkin sedikit berbeda — cek "NILAI RU AKTUAL DI DATABASE" di bawah,
       tetap filter dengan ILIKE '%RU IV%' atau ILIKE '%Cilacap%'
 
-▶ TABEL SAP — kolom RU masih berupa KODE SAP, bukan nama lengkap:
-  • sap_work_orders.plant  dan  sap_bom.plant  = kode plant SAP numerik:
+▶ TABEL SAP & master_data_equipment — kolom RU masih berupa KODE, bukan nama lengkap:
+  • sap_work_orders.plant       = kode plant SAP numerik
+  • sap_bom.plant               = kode plant SAP numerik
+  • sap_notifications.maint_plant = kode plant SAP numerik
+  • master_data_equipment.maintenance_plant = kode plant SAP numerik
         RU II→ LIKE '62%'   RU III→'63%'   RU IV→'64%'
         RU V → LIKE '65%'   RU VI →'66%'   RU VII→'67%'
-  • sap_notifications.maint_plant = format sama dengan plant di atas
-  • master_data_equipment.maintenance_plant = kode plant SAP numerik (sama)
   • master_data_equipment.location = teks "RU<n>-area" (mis. RU2-UTL, RU5-CDU):
         RU V → location LIKE 'RU5%'
 
