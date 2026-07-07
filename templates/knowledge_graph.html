@@ -1259,9 +1259,11 @@ async function resetAllNeo4j(btn) {
     }
     pollUntilDone('/api/neo4j/reset-all/status', statusEl, btn, 'Reset All', (result) => {
       if (result && result.success) {
+        const nodes = result.deleted?.toLocaleString() ?? 0;
+        const rels = result.relations_deleted?.toLocaleString() ?? 0;
         statusEl.style.color = 'var(--success)';
-        statusEl.textContent = `✅ Selesai! ${result.deleted?.toLocaleString() ?? 0} node dihapus. Jalankan Sync Tabel dan Sync Domain Relations secara manual.`;
-        sendBrowserNotif('Neo4j Reset Selesai', `${result.deleted?.toLocaleString() ?? 0} node telah dihapus dari Neo4j.`);
+        statusEl.textContent = `✅ Selesai! ${nodes} node dan ${rels} relasi dihapus. Jalankan Sync Tabel dan Sync Domain Relations secara manual.`;
+        sendBrowserNotif('Neo4j Reset Selesai', `${nodes} node dan ${rels} relasi telah dihapus dari Neo4j.`);
       } else {
         statusEl.style.color = 'var(--danger)';
         statusEl.textContent = `❌ Gagal: ${result?.error ?? 'Unknown error'}`;
