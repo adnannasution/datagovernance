@@ -980,3 +980,51 @@ def reset_all_relations() -> dict:
                 return {"success": True, "deleted": deleted}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ─── Clear Synced Nodes ───────────────────────────────────────────────────────
+
+def clear_synced_nodes() -> dict:
+    """
+    Hapus semua node hasil sync (non-Equipment, non-Document) beserta relasinya.
+    Diperlukan sebelum full re-sync agar tidak ada node duplikat dengan property lama.
+    Equipment dan Document node dipertahankan.
+    """
+    labels = [cfg["label"] for cfg in TABLE_NEO4J_CONFIG.values()]
+    label_filter = " OR ".join(f"n:{lbl}" for lbl in labels)
+    try:
+        with get_driver() as driver:
+            with driver.session() as session:
+                result = session.run(f"""
+                    MATCH (n)
+                    WHERE {label_filter}
+                    DETACH DELETE n
+                    RETURN count(n) AS deleted
+                """)
+                row = result.single()
+                deleted = row["deleted"] if row else 0
+                return {"success": True, "deleted": deleted}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def full_resync() -> dict:
+    """
+    Full re-sync: clear semua synced nodes lama, sync ulang dari PostgreSQL,
+    lalu rebuild domain relations.
+    Gunakan ini setelah perubahan skema kolom di PostgreSQL.
+    """
+    clear_result = clear_synced_nodes()
+    if not clear_result.get("success"):
+        return {"success": False, "step": "clear", "error": clear_result.get("error")}
+
+    sync_result = sync_all_tables()
+
+    rel_result = sync_domain_relations()
+
+    return {
+        "success": True,
+        "cleared": clear_result.get("deleted", 0),
+        "sync": sync_result,
+        "relations": rel_result,
+    }
