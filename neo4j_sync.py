@@ -965,24 +965,21 @@ def search_graph(query: str, ru: str = None, limit: int = 10) -> list:
 
 # ─── Reset All Relations ──────────────────────────────────────────────────────
 
-def reset_all_relations(batch_size: int = 10000) -> dict:
-    """Hapus semua relasi di Neo4j dalam batch agar tidak OOM."""
-    total_deleted = 0
+def reset_all_relations() -> dict:
+    """
+    Hapus semua relasi menggunakan CALL { } IN TRANSACTIONS agar tidak OOM.
+    Setiap batch berjalan dalam sub-transaksi terpisah di sisi Neo4j.
+    """
     try:
         with get_driver() as driver:
-            while True:
-                with driver.session() as session:
-                    result = session.run(
-                        f"MATCH ()-[r]->() WITH r LIMIT {batch_size} DELETE r RETURN count(r) AS deleted"
-                    )
-                    row = result.single()
-                    batch = row["deleted"] if row else 0
-                    total_deleted += batch
-                    if batch == 0:
-                        break
-        return {"success": True, "deleted": total_deleted}
+            with driver.session() as session:
+                session.run("""
+                    MATCH ()-[r]->()
+                    CALL { WITH r DELETE r } IN TRANSACTIONS OF 500 ROWS
+                """)
+        return {"success": True, "deleted": -1}
     except Exception as e:
-        return {"success": False, "error": str(e), "deleted": total_deleted}
+        return {"success": False, "error": str(e)}
 
 
 # ─── Clear Synced Nodes ───────────────────────────────────────────────────────
@@ -1033,44 +1030,29 @@ def full_resync() -> dict:
     }
 
 
-def reset_all_neo4j(batch_size: int = 5000) -> dict:
+def reset_all_neo4j() -> dict:
     """
-    Hapus SEMUA node dan relasi di Neo4j tanpa OOM.
-    Fase 1: hapus semua relasi dulu dalam batch (DELETE r, bukan DETACH).
-    Fase 2: hapus semua node dalam batch (DELETE n, tidak perlu DETACH karena relasi sudah kosong).
-    Pemisahan ini jauh lebih ringan di memori dibanding DETACH DELETE langsung.
+    Hapus SEMUA node dan relasi menggunakan CALL { } IN TRANSACTIONS (Neo4j 4.4+).
+    Setiap batch berjalan dalam sub-transaksi terpisah di sisi Neo4j — tidak OOM.
+    Fase 1: hapus relasi dulu. Fase 2: hapus node (tanpa DETACH karena relasi sudah kosong).
     """
-    total_rel = 0
-    total_node = 0
     try:
         with get_driver() as driver:
             # Fase 1: hapus semua relasi
-            while True:
-                with driver.session() as session:
-                    result = session.run(
-                        f"MATCH ()-[r]->() WITH r LIMIT {batch_size} DELETE r RETURN count(r) AS deleted"
-                    )
-                    row = result.single()
-                    batch = row["deleted"] if row else 0
-                    total_rel += batch
-                    if batch == 0:
-                        break
-
-            # Fase 2: hapus semua node (relasi sudah kosong, tidak butuh DETACH)
-            while True:
-                with driver.session() as session:
-                    result = session.run(
-                        f"MATCH (n) WITH n LIMIT {batch_size} DELETE n RETURN count(n) AS deleted"
-                    )
-                    row = result.single()
-                    batch = row["deleted"] if row else 0
-                    total_node += batch
-                    if batch == 0:
-                        break
-
-        return {"success": True, "deleted": total_node, "relations_deleted": total_rel}
+            with driver.session() as session:
+                session.run("""
+                    MATCH ()-[r]->()
+                    CALL { WITH r DELETE r } IN TRANSACTIONS OF 500 ROWS
+                """)
+            # Fase 2: hapus semua node (tidak butuh DETACH, relasi sudah kosong)
+            with driver.session() as session:
+                session.run("""
+                    MATCH (n)
+                    CALL { WITH n DELETE n } IN TRANSACTIONS OF 500 ROWS
+                """)
+        return {"success": True, "deleted": 0, "relations_deleted": 0}
     except Exception as e:
-        return {"success": False, "error": str(e), "deleted": total_node, "relations_deleted": total_rel}
+        return {"success": False, "error": str(e)}
 
 
 def reset_all_and_resync() -> dict:
