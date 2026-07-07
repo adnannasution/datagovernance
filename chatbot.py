@@ -313,35 +313,32 @@ DB_SCHEMA_FALLBACK = """
 PostgreSQL Database Schema — Pertamina Data Governance
 
 === KOLOM TAG PER TABEL (WAJIB dipakai untuk JOIN) ===
-PENTING: "equipment" / "tag" / "tag number" adalah SATU konsep, tapi nama kolomnya
-BERBEDA-BEDA tiap tabel (equipment, tag_number, tag_no, tag_no_ln, tag_no_tangki,
-equipment_tag_no, dll). Saat user menyebut equipment/tag tertentu, pakai kolom tag
-yang BENAR-BENAR ADA di tabel yang di-query sesuai pemetaan di bawah, dan untuk JOIN
-antar tabel samakan lewat kolom tag masing-masing.
+Semua tabel kini menggunakan kolom `equipment` sebagai kolom tag/equipment number.
+Khusus atg_monitoring punya DUA kolom equipment: `equipment_tangki` dan `equipment_atg`.
 
 master_data_equipment  → equipment
-bad_actor_monitoring   → tag_number
-icu_monitoring         → tag_no
-atg_monitoring         → tag_no_tangki
-metering_monitoring    → tag_number
+bad_actor_monitoring   → equipment
+icu_monitoring         → equipment
+atg_monitoring         → equipment_tangki (tag tangki)  &  equipment_atg (tag ATG)
+metering_monitoring    → equipment
 boc                    → equipment
 sap_notifications      → equipment
 sap_work_orders        → equipment
 sap_bom                → equipment
-pipeline_inspection    → tag_number
-zero_clamp             → tag_no_ln
-inspection_plan        → tag_no_ln
-irkap_program          → equipment_tag_no
-irkap_actual           → tag_no
-readiness_jetty        → tag_no
-readiness_tank         → tag_number
-readiness_spm          → tag_no
-workplan_jetty         → tag_no
-workplan_tank          → tag_no
-spm_workplan           → tag_no
+pipeline_inspection    → equipment
+zero_clamp             → equipment
+inspection_plan        → equipment
+irkap_program          → equipment
+irkap_actual           → equipment
+readiness_jetty        → equipment
+readiness_tank         → equipment
+readiness_spm          → equipment
+workplan_jetty         → equipment
+workplan_tank          → equipment
+spm_workplan           → equipment
 critical_eqp_prim_sec  → equipment
 power_stream           → equipment
-doc_tag_links          → tag_number
+doc_tag_links          → equipment
 -- Tabel berikut tidak punya kolom tag (agregat/operasional) --
 anggaran_maintenance   → filter by ru, tahun, kategori
 rotor_monitoring       → filter by refinery_unit, bulan
@@ -433,25 +430,25 @@ sap_bom
 === TABEL MONITORING ===
 
 bad_actor_monitoring
-  Kolom: tag_number, ru, status, problem, action_plan, progress,
+  Kolom: equipment, ru, status, problem, action_plan, progress,
          target_date, periode, action_plan_category,
          external_resource, no_irkap, action_plan_remark
 
 icu_monitoring
-  Kolom: tag_no, ru, icu_status (contoh: ICU / Non-ICU / Closed),
+  Kolom: equipment, ru, icu_status (contoh: ICU / Non-ICU / Closed),
          issue, mitigation, mitigasi_category,
          permanent_solution, solution_category,
          progress, target_closed, report_date,
          info, remark_mitigation, remark_solution, periode
 
 atg_monitoring
-  Kolom: tag_no_tangki, tag_no_atg, refinery_unit,
+  Kolom: equipment_tangki (tag tangki), equipment_atg (tag ATG), refinery_unit,
          status_atg, status_interkoneksi_atg,
          cert_no_atg, date_expired_atg,
          remark, rtl, action_plan_category, status_rtl, month_update, periode
 
 metering_monitoring
-  Kolom: tag_number, refinery_unit,
+  Kolom: equipment, refinery_unit,
          status_metering, cert_no_metering, date_expired_metering,
          remark, rtl, action_plan_category, status_rtl, month_update, periode
 
@@ -463,14 +460,14 @@ boc
          periode
 
 pipeline_inspection
-  Kolom: tag_number, refinery_unit, area, unit, fluida_service, nps,
+  Kolom: equipment, refinery_unit, area, unit, fluida_service, nps,
          from_location, to_location,
          last_inspection_date, next_inspection_date,
          last_measured_thickness, rem_life_years,
          jumlah_temporary_repair, remarks, bulan, tahun, periode
 
 zero_clamp
-  Kolom: tag_no_ln, ru, area, unit, services, description,
+  Kolom: equipment, ru, area, unit, services, description,
          type_damage, posisi, type_perbaikan,
          tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan,
          status, remarks, no_irkap, periode
@@ -489,7 +486,7 @@ critical_eqp_prim_sec
 === TABEL INSPECTION ===
 
 inspection_plan
-  Kolom: tag_no_ln, refinery_unit, area, unit,
+  Kolom: equipment, refinery_unit, area, unit,
          type_equipment, type_inspection, type_pekerjaan,
          due_date, due_year, plan_date, plan_year,
          actual_date, actual_year, update_date,
@@ -498,13 +495,13 @@ inspection_plan
 === TABEL READINESS ===
 
 readiness_jetty
-  Kolom: tag_no, refinery_unit, area, unit,
+  Kolom: equipment, refinery_unit, area, unit,
          status_operation, status_tuks, expired_tuks,
          status_ijin_ops, status_isps, status_struktur, remark_struktur,
          status_trestle, status_mla, status_fire_protection, month_update, periode
 
 readiness_tank
-  Kolom: tag_number, refinery_unit, area, unit,
+  Kolom: equipment, refinery_unit, area, unit,
          type_tangki, service_tangki, prioritas, status_operational,
          atg_certification_validity, status_coi,
          internal_inspection, plan_internal_inspection,
@@ -512,7 +509,7 @@ readiness_tank
          status_roof, status_cathodic, month_update, periode
 
 readiness_spm
-  Kolom: tag_no, refinery_unit, area, unit,
+  Kolom: equipment, refinery_unit, area, unit,
          status_operation, status_laik_operasi, expired_laik_operasi,
          status_ijin_spl, status_mbc, status_lds,
          status_mooring_hawser, status_floating_hose,
@@ -521,22 +518,22 @@ readiness_spm
 === TABEL WORKPLAN ===
 
 workplan_jetty
-  Kolom: tag_no, refinery_unit, area, unit,
+  Kolom: equipment, refinery_unit, area, unit,
          item, status_item, remark,
          rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 workplan_tank
-  Kolom: tag_no, unit, item, remark,
+  Kolom: equipment, unit, item, remark,
          rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 spm_workplan
-  Kolom: tag_no, refinery_unit, area, unit, item, remark,
+  Kolom: equipment, refinery_unit, area, unit, item, remark,
          rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 === TABEL IRKAP ===
 
 irkap_program
-  Kolom: equipment_tag_no (TAG), refinery_unit, disiplin,
+  Kolom: equipment, refinery_unit, disiplin,
          kategori_rkap, no_program_kerja, type_equipment, program_kerja,
          status_step, status_prognosa,
          start_plan, finish_plan,
@@ -544,7 +541,7 @@ irkap_program
          top_risk, asset_integrity, periode
 
 irkap_actual
-  Kolom: tag_no (TAG), no_program, kategori_rkap, program_kerja,
+  Kolom: equipment, no_program, kategori_rkap, program_kerja,
          refinery_unit, area, disiplin,
          status_step, status_prognosa, current_step,
          notif_no, wo_no, pr, po, anggaran_idr,
@@ -622,21 +619,21 @@ doc_registry
          file_name, file_type, status, total_pages, total_chunks, uploaded_at
 
 doc_tag_links
-  Kolom: doc_id, tag_number, link_type (manual/auto)
+  Kolom: doc_id, equipment, link_type (manual/auto)
 
 === CONTOH JOIN QUERY ===
 
 -- Bad actor + ICU monitoring per equipment:
 SELECT m.equipment, m.description, b.status AS bad_actor_status, i.icu_status
 FROM master_data_equipment m
-JOIN bad_actor_monitoring b ON m.equipment = b.tag_number
-JOIN icu_monitoring i ON m.equipment = i.tag_no
+JOIN bad_actor_monitoring b ON m.equipment = b.equipment
+JOIN icu_monitoring i ON m.equipment = i.equipment
 LIMIT 20
 
 -- Equipment critical A yang punya bad actor:
 SELECT m.equipment, m.description, m.criticality, b.status, b.problem
 FROM master_data_equipment m
-JOIN bad_actor_monitoring b ON m.equipment = b.tag_number
+JOIN bad_actor_monitoring b ON m.equipment = b.equipment
 WHERE m.criticality = 'A'
 LIMIT 20
 
@@ -644,8 +641,8 @@ LIMIT 20
 SELECT m.equipment, m.description, p.program_kerja, p.status_prognosa,
        a.current_step, a.status_step
 FROM master_data_equipment m
-JOIN irkap_program p ON m.equipment = p.equipment_tag_no
-LEFT JOIN irkap_actual a ON m.equipment = a.tag_no AND p.no_program_kerja = a.no_program
+JOIN irkap_program p ON m.equipment = p.equipment
+LEFT JOIN irkap_actual a ON m.equipment = a.equipment AND p.no_program_kerja = a.no_program
 LIMIT 20
 
 -- BOC equipment tanpa standby (N+0) criticality A:
@@ -667,7 +664,7 @@ LIMIT 20
 SELECT m.equipment, m.description, z.area, z.type_damage,
        z.tanggal_dipasang, z.status
 FROM master_data_equipment m
-JOIN zero_clamp z ON m.equipment = z.tag_no_ln
+JOIN zero_clamp z ON m.equipment = z.equipment
 WHERE z.tanggal_dilepas IS NULL
 LIMIT 20
 
@@ -676,7 +673,7 @@ SELECT ru, COUNT(*) AS jumlah FROM bad_actor_monitoring
 GROUP BY ru ORDER BY jumlah DESC
 
 -- ATG yang sertifikasinya expired:
-SELECT tag_no_tangki, refinery_unit, status_atg, cert_no_atg, date_expired_atg
+SELECT equipment_tangki, equipment_atg, refinery_unit, status_atg, cert_no_atg, date_expired_atg
 FROM atg_monitoring
 WHERE date_expired_atg < CURRENT_DATE
 LIMIT 20
@@ -685,7 +682,7 @@ LIMIT 20
 SELECT d.judul, d.tipe_dokumen, d.ru, d.uploaded_at, t.link_type
 FROM doc_registry d
 JOIN doc_tag_links t ON d.id = t.doc_id
-WHERE t.tag_number = 'XX-XXXX'
+WHERE t.equipment = 'XX-XXXX'
 LIMIT 10
 
 -- === CONTOH QUERY AGREGASI ===
@@ -706,9 +703,9 @@ FROM boc b WHERE b.mtbf > 0
 GROUP BY b.ru ORDER BY avg_mtbf ASC
 
 -- Top 10 equipment dengan bad actor terbanyak:
-SELECT tag_number, COUNT(*) AS jumlah
+SELECT equipment, COUNT(*) AS jumlah
 FROM bad_actor_monitoring
-GROUP BY tag_number ORDER BY jumlah DESC LIMIT 10
+GROUP BY equipment ORDER BY jumlah DESC LIMIT 10
 
 -- Jumlah equipment per criticality:
 SELECT criticality, COUNT(*) AS jumlah
@@ -716,7 +713,7 @@ FROM master_data_equipment
 GROUP BY criticality ORDER BY criticality
 
 -- Equipment dengan sisa umur pipeline terpendek:
-SELECT tag_number, refinery_unit, rem_life_years, fluida_service
+SELECT equipment, refinery_unit, rem_life_years, fluida_service
 FROM pipeline_inspection
 WHERE rem_life_years IS NOT NULL
 ORDER BY rem_life_years ASC LIMIT 10
@@ -897,10 +894,10 @@ SELECT refinery_unit, COUNT(*) AS total,
 FROM power_stream GROUP BY refinery_unit ORDER BY total DESC
 
 -- "Equipment mana yang paling berisiko?" → bad actor + ICU
-SELECT COALESCE(b.tag_number, i.tag_no) AS tag, b.problem, b.status AS bad_actor_status, i.icu_status
+SELECT COALESCE(b.equipment, i.equipment) AS equipment, b.problem, b.status AS bad_actor_status, i.icu_status
 FROM bad_actor_monitoring b
-FULL OUTER JOIN icu_monitoring i ON b.tag_number = i.tag_no
-WHERE b.tag_number IS NOT NULL OR i.tag_no IS NOT NULL
+FULL OUTER JOIN icu_monitoring i ON b.equipment = i.equipment
+WHERE b.equipment IS NOT NULL OR i.equipment IS NOT NULL
 LIMIT 20
 
 -- "Berapa equipment tanpa cadangan (rentan)?"
@@ -1215,7 +1212,7 @@ def _format_graph_context(tag: str, ctx: dict) -> str:
             for item in items[:3]:
                 d = dict(item)
                 # Show first 3 key-value pairs
-                kv = [f"{k}: {v}" for k, v in list(d.items())[:3] if v and k not in ('tag_number', 'equipment', 'tag_no', 'tag_no_ln', 'tag_no_tangki', 'equipment_tag_no')]
+                kv = [f"{k}: {v}" for k, v in list(d.items())[:3] if v and k not in ('equipment', 'equipment_tangki', 'equipment_atg')]
                 lines.append(f"  • {', '.join(kv)}")
 
     return "\n".join(lines)
@@ -1765,24 +1762,24 @@ def _handle_tag_sql_fallback(tag: str, message: str) -> dict | None:
 
     TAG_TABLES = [
         ("master_data_equipment",  "equipment"),
-        ("bad_actor_monitoring",   "tag_number"),
-        ("icu_monitoring",         "tag_no"),
+        ("bad_actor_monitoring",   "equipment"),
+        ("icu_monitoring",         "equipment"),
         ("boc",                    "equipment"),
         ("sap_notifications",      "equipment"),
         ("sap_work_orders",        "equipment"),
-        ("atg_monitoring",         "tag_no_tangki"),
-        ("metering_monitoring",    "tag_number"),
-        ("pipeline_inspection",    "tag_number"),
-        ("zero_clamp",             "tag_no_ln"),
-        ("inspection_plan",        "tag_no_ln"),
-        ("irkap_program",          "equipment_tag_no"),
-        ("irkap_actual",           "tag_no"),
-        ("readiness_jetty",        "tag_no"),
-        ("readiness_tank",         "tag_number"),
-        ("readiness_spm",          "tag_no"),
-        ("workplan_jetty",         "tag_no"),
-        ("workplan_tank",          "tag_no"),
-        ("spm_workplan",           "tag_no"),
+        ("atg_monitoring",         "equipment_tangki"),
+        ("metering_monitoring",    "equipment"),
+        ("pipeline_inspection",    "equipment"),
+        ("zero_clamp",             "equipment"),
+        ("inspection_plan",        "equipment"),
+        ("irkap_program",          "equipment"),
+        ("irkap_actual",           "equipment"),
+        ("readiness_jetty",        "equipment"),
+        ("readiness_tank",         "equipment"),
+        ("readiness_spm",          "equipment"),
+        ("workplan_jetty",         "equipment"),
+        ("workplan_tank",          "equipment"),
+        ("spm_workplan",           "equipment"),
         ("critical_eqp_prim_sec",  "equipment"),
         ("power_stream",           "equipment"),
     ]
