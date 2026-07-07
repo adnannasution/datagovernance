@@ -965,21 +965,24 @@ def search_graph(query: str, ru: str = None, limit: int = 10) -> list:
 
 # ─── Reset All Relations ──────────────────────────────────────────────────────
 
-def reset_all_relations() -> dict:
-    """Hapus semua relasi di Neo4j kecuali yang antar Equipment node."""
+def reset_all_relations(batch_size: int = 10000) -> dict:
+    """Hapus semua relasi di Neo4j dalam batch agar tidak OOM."""
+    total_deleted = 0
     try:
         with get_driver() as driver:
-            with driver.session() as session:
-                result = session.run("""
-                    MATCH ()-[r]->()
-                    DELETE r
-                    RETURN count(r) as deleted
-                """)
-                row = result.single()
-                deleted = row["deleted"] if row else 0
-                return {"success": True, "deleted": deleted}
+            while True:
+                with driver.session() as session:
+                    result = session.run(
+                        f"MATCH ()-[r]->() WITH r LIMIT {batch_size} DELETE r RETURN count(r) AS deleted"
+                    )
+                    row = result.single()
+                    batch = row["deleted"] if row else 0
+                    total_deleted += batch
+                    if batch == 0:
+                        break
+        return {"success": True, "deleted": total_deleted}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "deleted": total_deleted}
 
 
 # ─── Clear Synced Nodes ───────────────────────────────────────────────────────
@@ -1030,20 +1033,27 @@ def full_resync() -> dict:
     }
 
 
-def reset_all_neo4j() -> dict:
+def reset_all_neo4j(batch_size: int = 5000) -> dict:
     """
-    Hapus SEMUA node dan relasi di Neo4j (wipe total).
-    Gunakan sebelum sync ulang dari awal untuk menghilangkan semua data lama/duplikat.
+    Hapus SEMUA node dan relasi di Neo4j dalam batch kecil agar tidak OOM.
+    Setiap iterasi hanya hapus batch_size node sehingga transaksi tetap ringan.
     """
+    total_deleted = 0
     try:
         with get_driver() as driver:
-            with driver.session() as session:
-                result = session.run("MATCH (n) DETACH DELETE n RETURN count(n) AS deleted")
-                row = result.single()
-                deleted = row["deleted"] if row else 0
-                return {"success": True, "deleted": deleted}
+            while True:
+                with driver.session() as session:
+                    result = session.run(
+                        f"MATCH (n) WITH n LIMIT {batch_size} DETACH DELETE n RETURN count(n) AS deleted"
+                    )
+                    row = result.single()
+                    batch = row["deleted"] if row else 0
+                    total_deleted += batch
+                    if batch == 0:
+                        break
+        return {"success": True, "deleted": total_deleted}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "deleted": total_deleted}
 
 
 def reset_all_and_resync() -> dict:
