@@ -442,48 +442,49 @@ icu_monitoring
          issue, mitigation, mitigasi_category,
          permanent_solution, solution_category,
          progress, target_closed, report_date,
-         info, remark_mitigation, remark_solution
+         info, remark_mitigation, remark_solution, periode
 
 atg_monitoring
   Kolom: tag_no_tangki, tag_no_atg, refinery_unit,
          status_atg, status_interkoneksi_atg,
          cert_no_atg, date_expired_atg,
-         remark, rtl, action_plan_category, status_rtl, month_update
+         remark, rtl, action_plan_category, status_rtl, month_update, periode
 
 metering_monitoring
   Kolom: tag_number, refinery_unit,
          status_metering, cert_no_metering, date_expired_metering,
-         remark, rtl, action_plan_category, status_rtl, month_update
+         remark, rtl, action_plan_category, status_rtl, month_update, periode
 
 boc
   Kolom: equipment, ru, area, unit, grup_equipment, status,
          frequency, running_hours, mttr, mtbf,
          hasil (N+0=tidak ada standby KRITIS, N+1=ada 1 standby,
-                N+2=ada 2 standby, Single=tunggal tanpa grup)
+                N+2=ada 2 standby, Single=tunggal tanpa grup),
+         periode
 
 pipeline_inspection
   Kolom: tag_number, refinery_unit, area, unit, fluida_service, nps,
          from_location, to_location,
          last_inspection_date, next_inspection_date,
          last_measured_thickness, rem_life_years,
-         jumlah_temporary_repair, remarks, bulan, tahun
+         jumlah_temporary_repair, remarks, bulan, tahun, periode
 
 zero_clamp
   Kolom: tag_no_ln, ru, area, unit, services, description,
          type_damage, posisi, type_perbaikan,
          tanggal_dipasang, tanggal_dilepas, tanggal_rencana_perbaikan,
-         status, remarks, no_irkap
+         status, remarks, no_irkap, periode
 
 power_stream
   Kolom: equipment, refinery_unit, type_equipment,
          status_operation, status_n0,
          unit_measurement, desain, kapasitas_max, average_actual,
-         remark, date_update, month_update
+         remark, date_update, month_update, periode
 
 critical_eqp_prim_sec
   Kolom: equipment, refinery_unit, unit_proses,
          highlight_issue, corrective_action, target_corrective, traffic_corrective,
-         mitigasi_action, target_mitigasi, traffic_mitigasi, month_update
+         mitigasi_action, target_mitigasi, traffic_mitigasi, month_update, periode
 
 === TABEL INSPECTION ===
 
@@ -492,7 +493,7 @@ inspection_plan
          type_equipment, type_inspection, type_pekerjaan,
          due_date, due_year, plan_date, plan_year,
          actual_date, actual_year, update_date,
-         result_remaining_life, result_visual, grand_result
+         result_remaining_life, result_visual, grand_result, periode
 
 === TABEL READINESS ===
 
@@ -500,7 +501,7 @@ readiness_jetty
   Kolom: tag_no, refinery_unit, area, unit,
          status_operation, status_tuks, expired_tuks,
          status_ijin_ops, status_isps, status_struktur, remark_struktur,
-         status_trestle, status_mla, status_fire_protection, month_update
+         status_trestle, status_mla, status_fire_protection, month_update, periode
 
 readiness_tank
   Kolom: tag_number, refinery_unit, area, unit,
@@ -508,29 +509,29 @@ readiness_tank
          atg_certification_validity, status_coi,
          internal_inspection, plan_internal_inspection,
          status_atg, status_grounding, status_shell_course,
-         status_roof, status_cathodic, month_update
+         status_roof, status_cathodic, month_update, periode
 
 readiness_spm
   Kolom: tag_no, refinery_unit, area, unit,
          status_operation, status_laik_operasi, expired_laik_operasi,
          status_ijin_spl, status_mbc, status_lds,
          status_mooring_hawser, status_floating_hose,
-         status_cathodic_spl, month_update
+         status_cathodic_spl, month_update, periode
 
 === TABEL WORKPLAN ===
 
 workplan_jetty
   Kolom: tag_no, refinery_unit, area, unit,
          item, status_item, remark,
-         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 workplan_tank
   Kolom: tag_no, unit, item, remark,
-         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 spm_workplan
   Kolom: tag_no, refinery_unit, area, unit, item, remark,
-         rtl_action_plan, action_plan_category, target, status_rtl, month_update
+         rtl_action_plan, action_plan_category, target, status_rtl, month_update, periode
 
 === TABEL IRKAP ===
 
@@ -540,7 +541,7 @@ irkap_program
          status_step, status_prognosa,
          start_plan, finish_plan,
          nilai_anggaran_idr, nilai_anggaran_usd,
-         top_risk, asset_integrity
+         top_risk, asset_integrity, periode
 
 irkap_actual
   Kolom: tag_no (TAG), no_program, kategori_rkap, program_kerja,
@@ -549,69 +550,69 @@ irkap_actual
          notif_no, wo_no, pr, po, anggaran_idr,
          jadwal_pelaksanaan, actual_start1, actual_finish1,
          actual_start3, actual_finish3,
-         failure_impact, rekomendasi
+         failure_impact, rekomendasi, periode
 
 === TABEL OPERASI ===
 
 paf
   Kolom: ru, type, target_realisasi, value, plan_unplan, type2, month, value2,
-         ru2, target, month_update
+         ru2, target, month_update, periode
   Catatan: PAF = Plant Availability Factor, indikator ketersediaan kilang
 
 issue_paf
-  Kolom: type, ru, date, issue, month_update
+  Kolom: type, ru, date, issue, month_update, periode
   Catatan: Isu yang mempengaruhi PAF per kilang
 
 monitoring_operasi
   Kolom: refinery_unit, unit_proses, unit, design, minimal_capacity,
          plant_readiness, actual, type_limitasi_process, equipment_process,
          limitasi_alert_process, mitigasi_process, target_sts, actual,
-         type_limitasi_sts, equipment_sts, mitigasi_sts, month_update
+         type_limitasi_sts, equipment_sts, mitigasi_sts, month_update, periode
   Catatan: Monitoring kapasitas dan limitasi operasi per unit proses
 
 jumlah_eqp_utl
-  Kolom: refinery_unit, type_equipment, status_equipment, jumlah, month_update
+  Kolom: refinery_unit, type_equipment, status_equipment, jumlah, month_update, periode
   Catatan: Rekap jumlah equipment utilitas per status per RU
 
 critical_eqp_utl
   Kolom: refinery_unit, type_equipment, highlight_issue, corrective_action,
          target_corrective, traffic_corrective, mitigasi_action,
-         target_mitigasi, traffic_mitigasi, month_update
+         target_mitigasi, traffic_mitigasi, month_update, periode
   Catatan: Equipment kritis utilitas dengan highlight isu dan tindakan
 
 rotor_monitoring
   Kolom: refinery_unit, bulan, rotor, program, brand,
          status_readiness_spare, status_workplan, detail_status_workplan,
          keterangan, action_plan_category, no_irkap,
-         finish_date_eksekusi, readiness_rotor, last_update
+         finish_date_eksekusi, readiness_rotor, last_update, periode
   Catatan: Monitoring kesiapan rotor dan spare per RU
 
 program_kerja_atg
   Kolom: refinery_unit, type, atg_eksisting, program_2024, prokja,
-         action_plan_category, no_irkap, target, month_update
+         action_plan_category, no_irkap, target, month_update, periode
   Catatan: Program kerja pemasangan/perbaikan ATG
 
 === TABEL KEUANGAN ===
 
 anggaran_maintenance
-  Kolom: ru, tahun, kategori, tipe, nilai_usd
+  Kolom: ru, tahun, kategori, tipe, nilai_usd, periode
   Catatan: Rekap anggaran maintenance per RU per tahun per kategori
 
 tkdn
-  Kolom: refinery_unit, bulan, nominal, kdn, persentase, tahun
+  Kolom: refinery_unit, bulan, nominal, kdn, persentase, tahun, periode
   Catatan: TKDN = Tingkat Komponen Dalam Negeri, persentase penggunaan produk lokal
 
 === TABEL RCPS ===
 
 rcps
   Kolom: kilang, traffic, sum_of_progress, link, disiplin, date,
-         judul_rcps, rcps_no, criticallity
+         judul_rcps, rcps_no, criticallity, periode
   Catatan: Root Cause Problem Solving per kilang
 
 rcps_rekomendasi
   Kolom: kilang, rcps_no, judul_rcps, rekomendasi, description,
          traffic, pic, target, recommendation_category,
-         no_irkap, remark
+         no_irkap, remark, periode
   Catatan: Rekomendasi hasil RCPS yang harus ditindaklanjuti
 
 === TABEL DOKUMEN ===
@@ -922,6 +923,9 @@ SELECT 'Metering', COUNT(*) FROM metering_monitoring WHERE date_expired_metering
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
 - LIMIT maksimal 50
 - SELALU gunakan ILIKE '%nilai%' untuk pencarian nilai teks — jangan exact match
+- Kolom `periode` (format DATE: yyyy-mm-dd) tersedia di SEMUA tabel non-SAP — gunakan untuk filter rentang waktu:
+  mis. WHERE periode = '2025-06-01'  atau  WHERE periode BETWEEN '2025-01-01' AND '2025-06-30'
+  atau  WHERE DATE_TRUNC('month', periode) = '2025-06-01'
 - Filter RU di tabel NON-SAP (ru/refinery_unit/kilang): ILIKE '%RU IV%' atau ILIKE '%Cilacap%'
 - Filter RU di tabel SAP + master_data_equipment (plant/maint_plant/maintenance_plant):
   gunakan LIKE dengan kode numerik — RU II→LIKE '62%', RU III→'63%', RU IV→'64%',
