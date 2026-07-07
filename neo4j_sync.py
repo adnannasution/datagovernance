@@ -1028,3 +1028,39 @@ def full_resync() -> dict:
         "sync": sync_result,
         "relations": rel_result,
     }
+
+
+def reset_all_neo4j() -> dict:
+    """
+    Hapus SEMUA node dan relasi di Neo4j (wipe total).
+    Gunakan sebelum sync ulang dari awal untuk menghilangkan semua data lama/duplikat.
+    """
+    try:
+        with get_driver() as driver:
+            with driver.session() as session:
+                result = session.run("MATCH (n) DETACH DELETE n RETURN count(n) AS deleted")
+                row = result.single()
+                deleted = row["deleted"] if row else 0
+                return {"success": True, "deleted": deleted}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def reset_all_and_resync() -> dict:
+    """
+    Wipe total Neo4j (semua node + relasi), lalu sync ulang dari PostgreSQL dan rebuild relasi.
+    """
+    wipe_result = reset_all_neo4j()
+    if not wipe_result.get("success"):
+        return {"success": False, "step": "wipe", "error": wipe_result.get("error")}
+
+    sync_result = sync_all_tables()
+
+    rel_result = sync_domain_relations()
+
+    return {
+        "success": True,
+        "deleted": wipe_result.get("deleted", 0),
+        "sync": sync_result,
+        "relations": rel_result,
+    }

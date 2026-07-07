@@ -519,6 +519,34 @@ function renderTopologySVG(svg, tableData, hubMain, hubSub, opts) {
     <div id="full-resync-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
   </div>
 
+  <!-- Reset All Node + Relasi -->
+  <div class="card" style="border-left:3px solid #7c3aed;margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#7c3aed;margin-bottom:4px">🗑 Reset All Node & Relasi</div>
+        <div style="font-size:12px;color:var(--text3)">Hapus SEMUA node dan relasi di Neo4j (wipe total). Jalankan di background. Setelah selesai, sync ulang secara manual.</div>
+      </div>
+      <button class="btn" style="background:#ede9fe;color:#7c3aed;border:1px solid #ddd6fe;white-space:nowrap" onclick="resetAllNeo4j(this)">
+        Reset All
+      </button>
+    </div>
+    <div id="reset-all-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
+  </div>
+
+  <!-- Reset All + Re-sync -->
+  <div class="card" style="border-left:3px solid #dc2626;margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#dc2626;margin-bottom:4px">💣 Reset All + Re-sync (Wipe Total)</div>
+        <div style="font-size:12px;color:var(--text3)">Wipe TOTAL Neo4j lalu langsung sync ulang semua tabel dan rebuild relasi. Gunakan jika ada banyak node duplikat atau data kotor.</div>
+      </div>
+      <button class="btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;white-space:nowrap" onclick="resetAllResync(this)">
+        Reset All + Re-sync
+      </button>
+    </div>
+    <div id="reset-all-resync-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
+  </div>
+
 </div><!-- /tab-sync -->
 
 {% endblock %}
@@ -1166,6 +1194,58 @@ async function fullResync(btn) {
   }
   btn.disabled = false;
   btn.textContent = 'Full Re-sync';
+}
+
+async function resetAllNeo4j(btn) {
+  if (!confirm('⚠️ WIPE TOTAL: Semua node dan relasi di Neo4j akan dihapus. Lanjutkan?')) return;
+  const statusEl = document.getElementById('reset-all-status');
+  btn.disabled = true;
+  btn.textContent = 'Menghapus...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = 'Menghapus semua node dan relasi di background...';
+  try {
+    const res = await fetch('/api/neo4j/reset-all', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✅ ${data.message} Setelah selesai, jalankan Sync Tabel dan Sync Domain Relations secara manual.`;
+    } else {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `❌ Gagal: ${data.error}`;
+    }
+  } catch(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = `❌ Error: ${e.message}`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Reset All';
+}
+
+async function resetAllResync(btn) {
+  if (!confirm('💣 WIPE TOTAL + RE-SYNC: Semua node dan relasi dihapus, lalu sync ulang dari PostgreSQL. Proses berjalan di background dan memakan waktu. Lanjutkan?')) return;
+  const statusEl = document.getElementById('reset-all-resync-status');
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = 'Memulai wipe total + re-sync di background...';
+  try {
+    const res = await fetch('/api/neo4j/reset-all-resync', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✅ ${data.message} Tunggu beberapa saat lalu refresh halaman untuk melihat hasil.`;
+    } else {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `❌ Gagal: ${data.error}`;
+    }
+  } catch(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = `❌ Error: ${e.message}`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Reset All + Re-sync';
 }
 
 async function startDomainRelSync() {
