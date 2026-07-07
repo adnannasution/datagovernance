@@ -888,3 +888,27 @@ async def api_full_resync(background_tasks: BackgroundTasks):
             _table_sync_running = False
     background_tasks.add_task(_run)
     return {"success": True, "message": "Full re-sync dimulai di background"}
+
+@app.post("/api/neo4j/reset-all")
+async def api_reset_all_neo4j(background_tasks: BackgroundTasks):
+    from neo4j_sync import reset_all_neo4j
+    def _run():
+        reset_all_neo4j()
+    background_tasks.add_task(_run)
+    return {"success": True, "message": "Reset semua node dan relasi Neo4j dimulai di background"}
+
+@app.post("/api/neo4j/reset-all-resync")
+async def api_reset_all_and_resync(background_tasks: BackgroundTasks):
+    from neo4j_sync import reset_all_and_resync
+    global _table_sync_running
+    if _table_sync_running:
+        return {"success": False, "error": "Sync sedang berjalan, tunggu selesai"}
+    _table_sync_running = True
+    def _run():
+        global _table_sync_running, _last_table_sync_result
+        try:
+            _last_table_sync_result = reset_all_and_resync()
+        finally:
+            _table_sync_running = False
+    background_tasks.add_task(_run)
+    return {"success": True, "message": "Reset total + re-sync dimulai di background"}
