@@ -866,3 +866,25 @@ async def api_reset_relations():
     from neo4j_sync import reset_all_relations
     result = reset_all_relations()
     return result
+
+@app.post("/api/neo4j/clear-synced-nodes")
+async def api_clear_synced_nodes():
+    from neo4j_sync import clear_synced_nodes
+    result = clear_synced_nodes()
+    return result
+
+@app.post("/api/neo4j/full-resync")
+async def api_full_resync(background_tasks: BackgroundTasks):
+    from neo4j_sync import full_resync
+    global _table_sync_running
+    if _table_sync_running:
+        return {"success": False, "error": "Sync sedang berjalan, tunggu selesai"}
+    _table_sync_running = True
+    def _run():
+        global _table_sync_running, _last_table_sync_result
+        try:
+            _last_table_sync_result = full_resync()
+        finally:
+            _table_sync_running = False
+    background_tasks.add_task(_run)
+    return {"success": True, "message": "Full re-sync dimulai di background"}
