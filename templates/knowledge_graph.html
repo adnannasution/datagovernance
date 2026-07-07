@@ -1196,56 +1196,111 @@ async function fullResync(btn) {
   btn.textContent = 'Full Re-sync';
 }
 
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') await Notification.requestPermission();
+}
+
+function sendBrowserNotif(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  new Notification(title, { body, icon: '/static/favicon.ico' });
+}
+
+async function pollUntilDone(statusUrl, statusEl, btnEl, btnLabel, onDone) {
+  const timer = setInterval(async () => {
+    try {
+      const r = await fetch(statusUrl);
+      const d = await r.json();
+      if (!d.running) {
+        clearInterval(timer);
+        btnEl.disabled = false;
+        btnEl.textContent = btnLabel;
+        onDone(d.result);
+      } else {
+        const elapsed = Math.round((Date.now() - pollUntilDone._startTimes[statusUrl]) / 1000);
+        statusEl.textContent = `⏳ Sedang berjalan... (${elapsed}s) Tab boleh ditutup, notifikasi akan muncul saat selesai.`;
+      }
+    } catch(_) {}
+  }, 5000);
+  pollUntilDone._startTimes = pollUntilDone._startTimes || {};
+  pollUntilDone._startTimes[statusUrl] = Date.now();
+}
+
 async function resetAllNeo4j(btn) {
   if (!confirm('⚠️ WIPE TOTAL: Semua node dan relasi di Neo4j akan dihapus. Lanjutkan?')) return;
+  await requestNotifPermission();
   const statusEl = document.getElementById('reset-all-status');
   btn.disabled = true;
   btn.textContent = 'Menghapus...';
   statusEl.style.display = 'block';
   statusEl.style.color = 'var(--text2)';
-  statusEl.textContent = 'Menghapus semua node dan relasi di background...';
+  statusEl.textContent = 'Memulai reset di background... Tab boleh ditutup, notifikasi akan muncul saat selesai.';
   try {
     const res = await fetch('/api/neo4j/reset-all', { method: 'POST' });
     const data = await res.json();
-    if (data.success) {
-      statusEl.style.color = 'var(--success)';
-      statusEl.textContent = `✅ ${data.message} Setelah selesai, jalankan Sync Tabel dan Sync Domain Relations secara manual.`;
-    } else {
+    if (!data.success) {
       statusEl.style.color = 'var(--danger)';
       statusEl.textContent = `❌ Gagal: ${data.error}`;
+      btn.disabled = false;
+      btn.textContent = 'Reset All';
+      return;
     }
+    pollUntilDone('/api/neo4j/reset-all/status', statusEl, btn, 'Reset All', (result) => {
+      if (result && result.success) {
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `✅ Selesai! ${result.deleted?.toLocaleString() ?? 0} node dihapus. Jalankan Sync Tabel dan Sync Domain Relations secara manual.`;
+        sendBrowserNotif('Neo4j Reset Selesai', `${result.deleted?.toLocaleString() ?? 0} node telah dihapus dari Neo4j.`);
+      } else {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.textContent = `❌ Gagal: ${result?.error ?? 'Unknown error'}`;
+        sendBrowserNotif('Neo4j Reset Gagal', result?.error ?? 'Terjadi kesalahan.');
+      }
+    });
   } catch(e) {
     statusEl.style.color = 'var(--danger)';
     statusEl.textContent = `❌ Error: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Reset All';
   }
-  btn.disabled = false;
-  btn.textContent = 'Reset All';
 }
 
 async function resetAllResync(btn) {
-  if (!confirm('💣 WIPE TOTAL + RE-SYNC: Semua node dan relasi dihapus, lalu sync ulang dari PostgreSQL. Proses berjalan di background dan memakan waktu. Lanjutkan?')) return;
+  if (!confirm('💣 WIPE TOTAL + RE-SYNC: Semua node dan relasi dihapus, lalu sync ulang dari PostgreSQL. Proses memakan waktu lama. Lanjutkan?')) return;
+  await requestNotifPermission();
   const statusEl = document.getElementById('reset-all-resync-status');
   btn.disabled = true;
   btn.textContent = 'Memproses...';
   statusEl.style.display = 'block';
   statusEl.style.color = 'var(--text2)';
-  statusEl.textContent = 'Memulai wipe total + re-sync di background...';
+  statusEl.textContent = 'Memulai wipe total + re-sync di background... Tab boleh ditutup, notifikasi akan muncul saat selesai.';
   try {
     const res = await fetch('/api/neo4j/reset-all-resync', { method: 'POST' });
     const data = await res.json();
-    if (data.success) {
-      statusEl.style.color = 'var(--success)';
-      statusEl.textContent = `✅ ${data.message} Tunggu beberapa saat lalu refresh halaman untuk melihat hasil.`;
-    } else {
+    if (!data.success) {
       statusEl.style.color = 'var(--danger)';
       statusEl.textContent = `❌ Gagal: ${data.error}`;
+      btn.disabled = false;
+      btn.textContent = 'Reset All + Re-sync';
+      return;
     }
+    pollUntilDone('/api/neo4j/reset-all-resync/status', statusEl, btn, 'Reset All + Re-sync', (result) => {
+      if (result && result.success) {
+        const deleted = result.deleted?.toLocaleString() ?? 0;
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `✅ Selesai! ${deleted} node lama dihapus, sync ulang selesai. Refresh halaman untuk melihat coverage terbaru.`;
+        sendBrowserNotif('Neo4j Re-sync Selesai', `${deleted} node lama dihapus dan data berhasil di-sync ulang dari PostgreSQL.`);
+      } else {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.textContent = `❌ Gagal pada step "${result?.step ?? '?'}": ${result?.error ?? 'Unknown error'}`;
+        sendBrowserNotif('Neo4j Re-sync Gagal', result?.error ?? 'Terjadi kesalahan saat re-sync.');
+      }
+    });
   } catch(e) {
     statusEl.style.color = 'var(--danger)';
     statusEl.textContent = `❌ Error: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Reset All + Re-sync';
   }
-  btn.disabled = false;
-  btn.textContent = 'Reset All + Re-sync';
 }
 
 async function startDomainRelSync() {
