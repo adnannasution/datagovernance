@@ -366,26 +366,34 @@ Saat memfilter per RU, pakai kolom RU yang BENAR-BENAR ADA di tabel yang di-quer
 (lihat daftar kolom tiap tabel + "NILAI RU AKTUAL DI DATABASE" di bawah), lalu
 sesuaikan dengan format kolom tersebut.
 
-RU tersimpan dalam FORMAT BERBEDA tergantung kolom. FILTER PAKAI PREFIX (LIKE),
-bukan sama-dengan, karena satu RU bisa punya >1 sub-unit (mis. RU 2 = K201 & K202):
+RU tersimpan dalam FORMAT SERAGAM "RU <angka-romawi> <nama-kota>" di hampir semua tabel.
+Gunakan ILIKE untuk filter agar cocok dengan variasi penulisan:
 
-  • kolom `ru` (mis. bad_actor_monitoring) = kode-K "K<n>xx", digit ke-2 = nomor RU:
-      RU II→ru LIKE 'K2%'   RU III→'K3%'   RU IV→'K4%'
-      RU V →ru LIKE 'K5%'   RU VI →'K6%'   RU VII→'K7%'
-  • `master_data_equipment.maintenance_plant` = angka "6<n>xx":
-      RU V → maintenance_plant LIKE '65%'
+  • kolom `ru` (mis. bad_actor_monitoring, icu_monitoring, boc, anggaran_maintenance, paf, issue_paf, zero_clamp):
+      Nilai: 'RU II Dumai', 'RU III Plaju', 'RU IV Cilacap', 'RU V Balikpapan', 'RU VI Balongan', 'RU VII Kasim'
+      Filter: ru ILIKE '%RU II%'   atau   ru ILIKE '%Dumai%'
+
+  • kolom `refinery_unit` (mis. atg_monitoring, metering_monitoring, irkap_program, irkap_actual, readiness_tank,
+      readiness_jetty, readiness_spm, pipeline_inspection, inspection_plan, rotor_monitoring,
+      monitoring_operasi, jumlah_eqp_utl, critical_eqp_utl, program_kerja_atg, power_stream, tkdn,
+      critical_eqp_prim_sec, workplan_jetty, spm_workplan):
+      Nilai: 'RU II Dumai', 'RU III Plaju', 'RU IV Cilacap', 'RU V Balikpapan', 'RU VI Balongan', 'RU VII Kasim'
+      Filter: refinery_unit ILIKE '%RU IV%'   atau   refinery_unit ILIKE '%Cilacap%'
+
+  • kolom `kilang` (mis. rcps, rcps_rekomendasi):
+      Nilai mungkin sedikit berbeda — cek "NILAI RU AKTUAL DI DATABASE" di bawah, filter dengan ILIKE '%RU IV%'
+
+  • `master_data_equipment.maintenance_plant` = kode SAP numerik "6<n>xx":
+      RU II→ LIKE '62%'   RU III→'63%'   RU IV→'64%'
+      RU V → LIKE '65%'   RU VI →'66%'   RU VII→'67%'
   • `master_data_equipment.location` = teks "RU<n>-area" (mis. RU2-UTL):
       RU V → location LIKE 'RU5%'
-
-CATATAN: untuk kolom `refinery_unit`, `kilang`, dan `plant`, format nilainya
-belum dipastikan — cek nilai aktual di tabel terkait dan cocokkan secara fleksibel
-(boleh pakai ILIKE), jangan asumsikan satu format.
 
 === TABEL MASTER ===
 
 master_data_equipment
   Kolom: equipment (PK, tag number), description, functional_location,
-         maintenance_plant (kode RU: RU2/RU3/RU4/RU5/RU6/RU7),
+         maintenance_plant (kode SAP numerik: 62xx=RU II, 63xx=RU III, 64xx=RU IV, 65xx=RU V, 66xx=RU VI, 67xx=RU VII),
          location, criticality (A=sangat kritis, B=kritis, C=kurang kritis, Z=tidak kritis),
          equipment_category, technical_obj_type, manufacturer, model_type,
          material, material_description, size_dimension, cost_center, sort_field_ata
@@ -906,10 +914,10 @@ SELECT 'Metering', COUNT(*) FROM metering_monitoring WHERE date_expired_metering
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
 - LIMIT maksimal 50
 - SELALU gunakan ILIKE '%nilai%' untuk pencarian nilai teks — jangan exact match
-- Filter RU/kilang/plant: gunakan kolom refinery_unit (nilai: 'RU II','RU III','RU IV','RU V','RU VI','RU VII'),
-  kolom ru (nilai: 'RU II','RU III', dst), atau maintenance_plant (nilai: 'RU2','RU3','RU4','RU5','RU6','RU7') — tergantung tabel
+- Filter RU/kilang/plant: gunakan kolom refinery_unit atau ru (nilai seragam: 'RU II Dumai','RU III Plaju',
+  'RU IV Cilacap','RU V Balikpapan','RU VI Balongan','RU VII Kasim'), atau maintenance_plant (kode SAP: LIKE '62%'/'63%'/'64%'/'65%'/'66%'/'67%') — tergantung tabel
 - Kata "kilang", "plant", "refinery", "RU" semuanya merujuk hal yang sama → filter kolom yang sesuai per tabel
-- Gunakan ILIKE '%RU IV%' atau ILIKE '%RU4%' sesuai format kolom di tabel yang bersangkutan
+- Gunakan ILIKE '%RU IV%' atau ILIKE '%Cilacap%' untuk filter fleksibel di kolom ru/refinery_unit/kilang
 - JOIN selalu lewat kolom tag sesuai tabel (lihat daftar TAG di atas)
 - Jika istilah ambigu, cari di semua kolom status yang relevan sekaligus dengan OR
 - Jangan tanya nama tabel/kolom ke user — petakan sendiri dari konteks
