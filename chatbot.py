@@ -360,46 +360,44 @@ User menyebut RU dalam banyak bentuk: "RU 5", "RU V", "ru5", "RU V Balikpapan".
 Nomor↔nama: RU II=Dumai, III=Plaju, IV=Cilacap, V=Balikpapan, VI=Balongan, VII=Kasim.
 
 PENTING: "RU" adalah SATU konsep tapi disimpan di NAMA KOLOM yang BERBEDA-BEDA
-tergantung tabel. Kolom yang mewakili RU bisa salah satu dari:
-  ru, refinery_unit, maintenance_plant, plant, maint_plant, kilang.
-Saat memfilter per RU, pakai kolom RU yang BENAR-BENAR ADA di tabel yang di-query.
+tergantung tabel, dan FORMAT NILAINYA pun berbeda antara tabel non-SAP dan tabel SAP.
 
-SEMUA kolom terkait RU — termasuk tabel SAP — sudah seragam menggunakan format nama lengkap.
-Kolom plant/maint_plant/maintenance_plant di tabel SAP sudah di-alias ke nama yang sama.
+▶ TABEL NON-SAP — format nama lengkap, filter dengan ILIKE:
+  Nilai: 'RU II Dumai', 'RU III Plaju', 'RU IV Cilacap',
+         'RU V Balikpapan', 'RU VI Balongan', 'RU VII Kasim'
+  Filter contoh: ru ILIKE '%RU IV%'  atau  refinery_unit ILIKE '%Cilacap%'
 
-  Nilai standar: 'RU II Dumai', 'RU III Plaju', 'RU IV Cilacap',
-                 'RU V Balikpapan', 'RU VI Balongan', 'RU VII Kasim'
+  Kolom `ru`:        bad_actor_monitoring, icu_monitoring, boc, anggaran_maintenance,
+                     paf, issue_paf, zero_clamp
+  Kolom `refinery_unit`: atg_monitoring, metering_monitoring, irkap_program, irkap_actual,
+                     readiness_tank, readiness_jetty, readiness_spm, pipeline_inspection,
+                     inspection_plan, rotor_monitoring, monitoring_operasi, jumlah_eqp_utl,
+                     critical_eqp_utl, critical_eqp_prim_sec, program_kerja_atg,
+                     power_stream, workplan_jetty, spm_workplan, tkdn
+  Kolom `kilang`:    rcps, rcps_rekomendasi
 
-  Filter selalu pakai ILIKE agar fleksibel:
-      ILIKE '%RU II%'  atau  ILIKE '%Dumai%'
+▶ TABEL SAP & master_data_equipment — kolom RU berisi KODE PLANT SAP numerik:
+  Kolom: plant (sap_work_orders, sap_bom), maint_plant (sap_notifications),
+         maintenance_plant (master_data_equipment)
 
-  Kolom `ru` dipakai di:
-      bad_actor_monitoring, icu_monitoring, boc, anggaran_maintenance,
-      paf, issue_paf, zero_clamp
+  PEMETAAN KODE → RU (gunakan LIKE untuk filter karena ada sub-plant):
+      62xx  →  RU II Dumai        (mis. 6201, 6202)
+      63xx  →  RU III Plaju       (mis. 6301, 6302)
+      64xx  →  RU IV Cilacap      (mis. 6401, 6402)
+      65xx  →  RU V Balikpapan    (mis. 6501, 6502)
+      66xx  →  RU VI Balongan     (mis. 6601, 6602)
+      67xx  →  RU VII Kasim       (mis. 6701, 6702)
 
-  Kolom `refinery_unit` dipakai di:
-      atg_monitoring, metering_monitoring, irkap_program, irkap_actual,
-      readiness_tank, readiness_jetty, readiness_spm, pipeline_inspection,
-      inspection_plan, rotor_monitoring, monitoring_operasi, jumlah_eqp_utl,
-      critical_eqp_utl, critical_eqp_prim_sec, program_kerja_atg,
-      power_stream, workplan_jetty, spm_workplan, tkdn
+  Filter: plant LIKE '62%'  (RU II),  plant LIKE '65%'  (RU V), dst
 
-  Kolom `plant` / `maint_plant` / `maintenance_plant` dipakai di:
-      sap_work_orders (plant), sap_bom (plant),
-      sap_notifications (maint_plant), master_data_equipment (maintenance_plant)
-      → sudah di-alias, nilai sama: 'RU II Dumai', 'RU III Plaju', dst
-
-  Kolom `kilang` dipakai di:
-      rcps, rcps_rekomendasi — nilai sama, filter dengan ILIKE '%RU IV%'
-
-  CATATAN: master_data_equipment.location masih berformat kode area "RU<n>-area"
+  CATATAN: master_data_equipment.location juga masih kode area "RU<n>-xxx"
       (mis. RU2-UTL, RU5-CDU) → filter: location LIKE 'RU5%' untuk RU V
 
 === TABEL MASTER ===
 
 master_data_equipment
   Kolom: equipment (PK, tag number), description, functional_location,
-         maintenance_plant (nama RU, sudah di-alias: 'RU II Dumai','RU III Plaju','RU IV Cilacap','RU V Balikpapan','RU VI Balongan','RU VII Kasim'),
+         maintenance_plant (kode plant SAP: 62xx=RU II Dumai, 63xx=RU III Plaju, 64xx=RU IV Cilacap, 65xx=RU V Balikpapan, 66xx=RU VI Balongan, 67xx=RU VII Kasim),
          location, criticality (A=sangat kritis, B=kritis, C=kurang kritis, Z=tidak kritis),
          equipment_category, technical_obj_type, manufacturer, model_type,
          material, material_description, size_dimension, cost_center, sort_field_ata
@@ -411,7 +409,7 @@ sap_notifications
          req_start, required_end, description, order_no,
          functional_loc, location, criticality,
          planner_group, main_workctr,
-         maint_plant (nama RU, sudah di-alias: 'RU II Dumai','RU III Plaju', dst),
+         maint_plant (kode plant SAP: 62xx=RU II Dumai, 63xx=RU III Plaju, 64xx=RU IV Cilacap, 65xx=RU V Balikpapan, 66xx=RU VI Balongan, 67xx=RU VII Kasim),
          uploaded_at
 
 sap_work_orders
@@ -422,14 +420,14 @@ sap_work_orders
          planner_group, main_workctr, maint_act_type,
          total_plan_cost, total_act_cost, priority,
          notification, po_number,
-         plant (nama RU, sudah di-alias: 'RU II Dumai','RU III Plaju', dst)
+         plant (kode plant SAP: 62xx=RU II Dumai, 63xx=RU III Plaju, 64xx=RU IV Cilacap, 65xx=RU V Balikpapan, 66xx=RU VI Balongan, 67xx=RU VII Kasim)
 
 sap_bom
   Kolom: equipment (tag number peralatan), equipment_desc, component (nomor material komponen),
          component_desc, quantity, component_unit, criticality,
          material_type, spare_part_id, bom_category, valid_from, valid_to,
          mfr_part_number, old_matl_number, item_category, assembly,
-         plant (nama RU, sudah di-alias: 'RU II Dumai','RU III Plaju', dst),
+         plant (kode plant SAP: 62xx=RU II Dumai, 63xx=RU III Plaju, 64xx=RU IV Cilacap, 65xx=RU V Balikpapan, 66xx=RU VI Balongan, 67xx=RU VII Kasim),
          usage, upload_batch, uploaded_at
 
 === TABEL MONITORING ===
@@ -924,10 +922,11 @@ SELECT 'Metering', COUNT(*) FROM metering_monitoring WHERE date_expired_metering
 - Hanya SELECT, tidak boleh INSERT/UPDATE/DELETE/DROP
 - LIMIT maksimal 50
 - SELALU gunakan ILIKE '%nilai%' untuk pencarian nilai teks — jangan exact match
-- Filter RU di SEMUA tabel: gunakan ILIKE '%RU IV%' atau ILIKE '%Cilacap%' — tidak perlu bedakan SAP vs non-SAP
-  Nilai seragam di semua kolom RU: 'RU II Dumai','RU III Plaju','RU IV Cilacap','RU V Balikpapan','RU VI Balongan','RU VII Kasim'
-  (kolom plant/maint_plant/maintenance_plant di tabel SAP sudah di-alias ke format nama yang sama)
-- Kata "kilang", "plant", "refinery", "RU" semuanya merujuk hal yang sama → filter kolom yang sesuai per tabel
+- Filter RU di tabel NON-SAP (ru/refinery_unit/kilang): ILIKE '%RU IV%' atau ILIKE '%Cilacap%'
+- Filter RU di tabel SAP + master_data_equipment (plant/maint_plant/maintenance_plant):
+  gunakan LIKE dengan kode numerik — RU II→LIKE '62%', RU III→'63%', RU IV→'64%',
+  RU V→'65%', RU VI→'66%', RU VII→'67%'
+- Kata "kilang", "plant", "refinery", "RU" semuanya merujuk hal yang sama → pilih kolom dan format sesuai tabel
 - JOIN selalu lewat kolom tag sesuai tabel (lihat daftar TAG di atas)
 - Jika istilah ambigu, cari di semua kolom status yang relevan sekaligus dengan OR
 - Jangan tanya nama tabel/kolom ke user — petakan sendiri dari konteks
