@@ -861,11 +861,29 @@ async def api_bulk_approve(request: Request):
     approved = _db_tm.bulk_approve(ids, validated_by)
     return {"approved": approved}
 
+_reset_rel_running = False
+_reset_rel_result = None
+
 @app.post("/api/neo4j/reset-relations")
-async def api_reset_relations():
+async def api_reset_relations(background_tasks: BackgroundTasks):
     from neo4j_sync import reset_all_relations
-    result = reset_all_relations()
-    return result
+    global _reset_rel_running, _reset_rel_result
+    if _reset_rel_running:
+        return {"success": False, "error": "Reset relasi sedang berjalan, tunggu selesai"}
+    _reset_rel_running = True
+    _reset_rel_result = None
+    def _run():
+        global _reset_rel_running, _reset_rel_result
+        try:
+            _reset_rel_result = reset_all_relations()
+        finally:
+            _reset_rel_running = False
+    background_tasks.add_task(_run)
+    return {"success": True, "message": "Reset semua relasi dimulai di background"}
+
+@app.get("/api/neo4j/reset-relations/status")
+async def api_reset_relations_status():
+    return {"running": _reset_rel_running, "result": _reset_rel_result}
 
 @app.post("/api/neo4j/clear-synced-nodes")
 async def api_clear_synced_nodes():
