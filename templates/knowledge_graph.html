@@ -505,6 +505,20 @@ function renderTopologySVG(svg, tableData, hubMain, hubSub, opts) {
     <div id="reset-rel-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
   </div>
 
+  <!-- Full Re-sync -->
+  <div class="card" style="border-left:3px solid #f59e0b;margin-top:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#d97706;margin-bottom:4px">🔄 Full Re-sync (Clear + Sync + Relations)</div>
+        <div style="font-size:12px;color:var(--text3)">Hapus semua node hasil sync lama, sync ulang semua tabel dari PostgreSQL, lalu rebuild relasi domain. Gunakan setelah perubahan skema kolom.</div>
+      </div>
+      <button class="btn" style="background:#fef3c7;color:#d97706;border:1px solid #fde68a;white-space:nowrap" onclick="fullResync(this)">
+        Full Re-sync
+      </button>
+    </div>
+    <div id="full-resync-status" style="display:none;margin-top:0.5rem;padding:0.75rem;background:var(--surface2);border-radius:var(--radius);font-size:13px"></div>
+  </div>
+
 </div><!-- /tab-sync -->
 
 {% endblock %}
@@ -1126,6 +1140,32 @@ async function resetRelations(btn) {
   }
   btn.disabled = false;
   btn.textContent = 'Reset Relasi';
+}
+
+async function fullResync(btn) {
+  if (!confirm('Yakin jalankan Full Re-sync? Semua node hasil sync lama akan dihapus, lalu sync ulang dari PostgreSQL dan rebuild relasi domain.')) return;
+  const statusEl = document.getElementById('full-resync-status');
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--text2)';
+  statusEl.textContent = 'Memulai full re-sync di background...';
+  try {
+    const res = await fetch('/api/neo4j/full-resync', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = `✅ ${data.message} Tunggu beberapa saat lalu refresh halaman untuk melihat hasil.`;
+    } else {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `❌ Gagal: ${data.error}`;
+    }
+  } catch(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = `❌ Error: ${e.message}`;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Full Re-sync';
 }
 
 async function startDomainRelSync() {
